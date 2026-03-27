@@ -79,7 +79,16 @@ class SpotifyLibraryFragment : Fragment() {
 
         viewModel.error.observe(viewLifecycleOwner) { error ->
             error?.let {
-                Toast.makeText(requireContext(), it, Toast.LENGTH_SHORT).show()
+                // Show detailed error message
+                android.app.AlertDialog.Builder(requireContext())
+                    .setTitle("Unable to Load Library")
+                    .setMessage(it)
+                    .setPositiveButton("OK") { dialog, _ -> dialog.dismiss() }
+                    .setNeutralButton("Sign Out & Retry") { _, _ ->
+                        viewModel.signOut()
+                        Toast.makeText(requireContext(), "Please sign in again", Toast.LENGTH_SHORT).show()
+                    }
+                    .show()
                 viewModel.clearError()
             }
         }

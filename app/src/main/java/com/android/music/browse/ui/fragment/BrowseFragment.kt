@@ -117,8 +117,18 @@ class BrowseFragment : Fragment() {
     }
 
     private fun signIn() {
-        val signInIntent = authManager.getSignInIntent()
-        signInLauncher.launch(signInIntent)
+        val currentPlatform = viewModel.currentPlatform.value ?: StreamingPlatform.YOUTUBE
+        
+        when (currentPlatform) {
+            StreamingPlatform.YOUTUBE -> {
+                val signInIntent = authManager.getSignInIntent()
+                signInLauncher.launch(signInIntent)
+            }
+            StreamingPlatform.SPOTIFY -> {
+                val spotifyAuthManager = com.android.music.browse.auth.SpotifyAuthManager.getInstance(requireContext())
+                spotifyAuthManager.startAuthorization(requireContext())
+            }
+        }
     }
 
     private fun selectPlatform(platform: StreamingPlatform) {
@@ -230,6 +240,9 @@ class BrowseFragment : Fragment() {
                 binding.viewPager.visibility = View.GONE
                 binding.signInContainer.visibility = View.VISIBLE
                 binding.spotifyContainer.visibility = View.GONE
+                
+                // Update sign-in UI for Spotify
+                updateSignInUI(StreamingPlatform.SPOTIFY)
             }
             return
         }
@@ -253,6 +266,37 @@ class BrowseFragment : Fragment() {
             binding.viewPager.visibility = View.GONE
             binding.signInContainer.visibility = View.VISIBLE
             binding.spotifyContainer.visibility = View.GONE
+            
+            // Update sign-in UI for YouTube
+            updateSignInUI(StreamingPlatform.YOUTUBE)
+        }
+    }
+    
+    private fun updateSignInUI(platform: StreamingPlatform) {
+        val signInIcon = binding.signInContainer.findViewById<android.widget.ImageView>(R.id.ivSignInIcon)
+        val signInTitle = binding.signInContainer.findViewById<android.widget.TextView>(R.id.tvSignInTitle)
+        val signInDescription = binding.signInContainer.findViewById<android.widget.TextView>(R.id.tvSignInDescription)
+        val signInButton = binding.btnSignIn
+        
+        when (platform) {
+            StreamingPlatform.SPOTIFY -> {
+                signInIcon?.setImageResource(R.drawable.ic_spotify)
+                signInIcon?.imageTintList = android.content.res.ColorStateList.valueOf(
+                    resources.getColor(R.color.spotifyGreen, null)
+                )
+                signInTitle?.text = "Sign in to Spotify"
+                signInDescription?.text = "Sign in to browse music, access your library, and discover new tracks"
+                signInButton.text = "Sign in with Spotify"
+            }
+            StreamingPlatform.YOUTUBE -> {
+                signInIcon?.setImageResource(R.drawable.ic_youtube)
+                signInIcon?.imageTintList = android.content.res.ColorStateList.valueOf(
+                    resources.getColor(R.color.colorAccent, null)
+                )
+                signInTitle?.text = "Sign in to YouTube"
+                signInDescription?.text = "Sign in to browse videos, access your subscriptions, and manage your playlists"
+                signInButton.text = "Sign in with Google"
+            }
         }
     }
 

@@ -6,8 +6,14 @@ import com.android.music.browse.data.api.model.YouTubePlaylistListResponse
 import com.android.music.browse.data.api.model.YouTubeSearchResponse
 import com.android.music.browse.data.api.model.YouTubeSubscriptionListResponse
 import com.android.music.browse.data.api.model.YouTubeVideoListResponse
+import com.android.music.converter.data.api.model.AddVideoToPlaylistRequest
+import com.android.music.converter.data.api.model.AddVideoToPlaylistResponse
+import com.android.music.converter.data.api.model.CreatePlaylistRequest
+import com.android.music.converter.data.api.model.CreatePlaylistResponse
 import retrofit2.Response
+import retrofit2.http.Body
 import retrofit2.http.GET
+import retrofit2.http.POST
 import retrofit2.http.Query
 
 /**
@@ -150,4 +156,22 @@ interface YouTubeApiService {
         @Query("maxResults") maxResults: Int = 50,
         @Query("pageToken") pageToken: String? = null
     ): Response<YouTubePlaylistListResponse>
+
+    /**
+     * Create a new YouTube playlist
+     */
+    @POST("playlists")
+    suspend fun createPlaylist(
+        @Query("part") part: String = "snippet,status",
+        @Body request: CreatePlaylistRequest
+    ): Response<CreatePlaylistResponse>
+
+    /**
+     * Add a video to a YouTube playlist
+     */
+    @POST("playlistItems")
+    suspend fun addVideoToPlaylist(
+        @Query("part") part: String = "snippet",
+        @Body request: AddVideoToPlaylistRequest
+    ): Response<AddVideoToPlaylistResponse>
 }

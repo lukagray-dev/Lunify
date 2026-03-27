@@ -87,6 +87,10 @@ class ProfileFragment : Fragment() {
             openDuoIdBottomSheet()
         }
         
+        binding.menuPlaylistConverter.setOnClickListener {
+            openPlaylistConverter()
+        }
+        
         binding.menuUserAgreement.setOnClickListener {
             openUserAgreement()
         }
@@ -217,6 +221,14 @@ class ProfileFragment : Fragment() {
     
     private fun openDuoIdBottomSheet() {
         DuoIdBottomSheet.newInstance().show(childFragmentManager, DuoIdBottomSheet.TAG)
+    }
+    
+    private fun openPlaylistConverter() {
+        val converterFragment = com.android.music.converter.ui.fragment.PlaylistConverterFragment.newInstance()
+        parentFragmentManager.beginTransaction()
+            .replace(R.id.profileContainer, converterFragment)
+            .addToBackStack("PlaylistConverter")
+            .commit()
     }
     
     private fun openUserAgreement() {

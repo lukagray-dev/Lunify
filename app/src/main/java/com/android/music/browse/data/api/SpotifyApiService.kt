@@ -32,7 +32,8 @@ interface SpotifyApiService {
     @GET("browse/new-releases")
     suspend fun getNewReleases(
         @Query("limit") limit: Int = 20,
-        @Query("offset") offset: Int = 0
+        @Query("offset") offset: Int = 0,
+        @Query("country") country: String? = null
     ): Response<SpotifyNewReleasesResponse>
 
     @GET("recommendations")

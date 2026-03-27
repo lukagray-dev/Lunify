@@ -257,6 +257,44 @@
                         android:contentDescription="@null" />
                 </LinearLayout>
 
+                <!-- Divider -->
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:layout_marginHorizontal="16dp"
+                    android:background="@color/dividerColor" />
+
+                <!-- Playlist Converter -->
+                <LinearLayout
+                    android:id="@+id/menuPlaylistConverter"
+                    style="@style/ProfileMenuItemStyle"
+                    android:layout_width="match_parent"
+                    android:layout_height="56dp">
+
+                    <ImageView
+                        android:layout_width="24dp"
+                        android:layout_height="24dp"
+                        android:src="@drawable/ic_sync"
+                        app:tint="@color/colorAccent"
+                        android:contentDescription="@null" />
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:layout_marginStart="16dp"
+                        android:text="Playlist Converter"
+                        android:textColor="@color/textPrimary"
+                        android:textSize="16sp" />
+
+                    <ImageView
+                        android:layout_width="20dp"
+                        android:layout_height="20dp"
+                        android:src="@drawable/ic_chevron_right"
+                        app:tint="@color/textSecondary"
+                        android:contentDescription="@null" />
+                </LinearLayout>
+
                 <!-- Section Divider -->
                 <View
                     android:layout_width="match_parent"

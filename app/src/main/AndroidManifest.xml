@@ -123,6 +123,21 @@
             android:theme="@style/Theme.Music"
             android:parentActivityName=".ui.activity.MainActivity"/>
 
+        <!-- Spotify OAuth Callback Activity -->
+        <activity
+            android:name=".browse.auth.SpotifyCallbackActivity"
+            android:exported="true"
+            android:launchMode="singleTask">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="com.android.music"
+                    android:host="spotify-callback" />
+            </intent-filter>
+        </activity>
+
         <!-- Music Service -->
         <service
             android:name=".service.MusicService"

@@ -10,11 +10,11 @@
         android:id="@+id/tabLayout"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="?attr/colorSurface"
-        app:tabIndicatorColor="?attr/colorPrimary"
+        android:background="@color/backgroundColor"
+        app:tabIndicatorColor="@color/spotifyGreen"
         app:tabMode="fixed"
-        app:tabSelectedTextColor="?attr/colorPrimary"
-        app:tabTextColor="?attr/colorOnSurfaceVariant" />
+        app:tabSelectedTextColor="@color/spotifyGreen"
+        app:tabTextColor="@color/textSecondary" />
 
     <!-- ViewPager2 -->
     <androidx.viewpager2.widget.ViewPager2

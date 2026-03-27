@@ -42,40 +42,70 @@ class SpotifyRepository(context: Context? = null) {
      */
     fun getHomeContent(): Flow<Result<SpotifyHomeContent>> = flow {
         try {
+            Log.d("SpotifyRepository", "Loading home content")
             val token = getOAuthToken()
             if (token == null) {
+                Log.e("SpotifyRepository", "No OAuth token available")
                 emit(Result.failure(Exception("User not authenticated")))
                 return@flow
             }
 
+            Log.d("SpotifyRepository", "Token obtained, making API calls")
             NetworkModule.spotifyOauthToken = token
 
             // Get featured playlists
-            val featuredResponse = apiService.getFeaturedPlaylists(limit = 10)
+            val featuredResponse = apiService.getFeaturedPlaylists(limit = 20)
             val featuredPlaylists = if (featuredResponse.isSuccessful) {
+                Log.d("SpotifyRepository", "Featured playlists: ${featuredResponse.body()?.playlists?.items?.size ?: 0}")
                 featuredResponse.body()?.playlists?.items?.map { it.toSpotifyPlaylist() } ?: emptyList()
-            } else emptyList()
+            } else {
+                Log.e("SpotifyRepository", "Featured playlists failed: ${featuredResponse.code()} - ${featuredResponse.errorBody()?.string()}")
+                emptyList()
+            }
 
-            // Get new releases
-            val newReleasesResponse = apiService.getNewReleases(limit = 10)
-            val newReleases = if (newReleasesResponse.isSuccessful) {
-                newReleasesResponse.body()?.albums?.items?.map { it.toSpotifyAlbum() } ?: emptyList()
-            } else emptyList()
+            // Get new releases - skip if fails (may require additional permissions)
+            val newReleases = try {
+                val newReleasesResponse = apiService.getNewReleases(limit = 20)
+                if (newReleasesResponse.isSuccessful) {
+                    Log.d("SpotifyRepository", "New releases: ${newReleasesResponse.body()?.albums?.items?.size ?: 0}")
+                    newReleasesResponse.body()?.albums?.items?.map { it.toSpotifyAlbum() } ?: emptyList()
+                } else {
+                    Log.w("SpotifyRepository", "New releases failed: ${newReleasesResponse.code()}, skipping")
+                    emptyList()
+                }
+            } catch (e: Exception) {
+                Log.w("SpotifyRepository", "New releases error, skipping", e)
+                emptyList()
+            }
 
-            // Get recommendations (using popular genres as seeds)
-            val recommendationsResponse = apiService.getRecommendations(
-                seedGenres = "pop,rock,hip-hop",
-                limit = 20
-            )
-            val recommendations = if (recommendationsResponse.isSuccessful) {
-                recommendationsResponse.body()?.tracks?.map { it.toSpotifyTrack() } ?: emptyList()
-            } else emptyList()
+            // Get user's top tracks as recommendations instead of seed-based recommendations
+            val recommendations = try {
+                val topTracksResponse = apiService.getUserTopTracks(timeRange = "short_term", limit = 20)
+                if (topTracksResponse.isSuccessful) {
+                    Log.d("SpotifyRepository", "Top tracks: ${topTracksResponse.body()?.items?.size ?: 0}")
+                    topTracksResponse.body()?.items?.map { it.toSpotifyTrack() } ?: emptyList()
+                } else {
+                    Log.w("SpotifyRepository", "Top tracks failed: ${topTracksResponse.code()}, trying recently played")
+                    // Fallback to recently played
+                    val recentResponse = apiService.getRecentlyPlayed(limit = 20)
+                    if (recentResponse.isSuccessful) {
+                        recentResponse.body()?.items?.map { it.track.toSpotifyTrack() } ?: emptyList()
+                    } else {
+                        emptyList()
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w("SpotifyRepository", "Recommendations error, skipping", e)
+                emptyList()
+            }
 
-            emit(Result.success(SpotifyHomeContent(
+            val content = SpotifyHomeContent(
                 featuredPlaylists = featuredPlaylists,
                 newReleases = newReleases,
                 recommendations = recommendations
-            )))
+            )
+            Log.d("SpotifyRepository", "Home content loaded: ${featuredPlaylists.size} playlists, ${newReleases.size} releases, ${recommendations.size} tracks")
+            emit(Result.success(content))
         } catch (e: Exception) {
             Log.e("SpotifyRepository", "Error loading home content", e)
             emit(Result.failure(e))
@@ -124,8 +154,10 @@ class SpotifyRepository(context: Context? = null) {
      */
     fun getSavedTracks(): Flow<Result<List<SpotifyTrack>>> = flow {
         try {
+            Log.d("SpotifyRepository", "Loading saved tracks")
             val token = getOAuthToken()
             if (token == null) {
+                Log.e("SpotifyRepository", "No OAuth token available")
                 emit(Result.failure(Exception("User not authenticated")))
                 return@flow
             }
@@ -136,9 +168,19 @@ class SpotifyRepository(context: Context? = null) {
 
             if (response.isSuccessful) {
                 val tracks = response.body()?.items?.map { it.track.toSpotifyTrack() } ?: emptyList()
+                Log.d("SpotifyRepository", "Loaded ${tracks.size} saved tracks")
                 emit(Result.success(tracks))
             } else {
-                emit(Result.failure(Exception("Failed to load saved tracks: ${response.code()}")))
+                val errorBody = response.errorBody()?.string()
+                Log.e("SpotifyRepository", "Failed to load saved tracks: ${response.code()} - $errorBody")
+                
+                // Provide helpful error message for 403
+                val errorMessage = when (response.code()) {
+                    403 -> "Access denied. Please ensure:\n1. Your Spotify app has 'user-library-read' scope enabled\n2. Your account is added to the app's allowlist in Spotify Developer Dashboard\n3. You've re-authenticated after adding scopes"
+                    401 -> "Authentication expired. Please sign in again."
+                    else -> "Failed to load saved tracks: ${response.code()}"
+                }
+                emit(Result.failure(Exception(errorMessage)))
             }
         } catch (e: Exception) {
             Log.e("SpotifyRepository", "Error loading saved tracks", e)
@@ -205,8 +247,10 @@ class SpotifyRepository(context: Context? = null) {
      */
     fun getUserProfile(): Flow<Result<SpotifyUserProfile>> = flow {
         try {
+            Log.d("SpotifyRepository", "Loading user profile")
             val token = getOAuthToken()
             if (token == null) {
+                Log.e("SpotifyRepository", "No OAuth token available")
                 emit(Result.failure(Exception("User not authenticated")))
                 return@flow
             }
@@ -218,12 +262,21 @@ class SpotifyRepository(context: Context? = null) {
             if (response.isSuccessful) {
                 val profile = response.body()?.toSpotifyUserProfile()
                 if (profile != null) {
+                    Log.d("SpotifyRepository", "Profile loaded: ${profile.displayName}")
                     emit(Result.success(profile))
                 } else {
                     emit(Result.failure(Exception("Profile not found")))
                 }
             } else {
-                emit(Result.failure(Exception("Failed to load profile: ${response.code()}")))
+                val errorBody = response.errorBody()?.string()
+                Log.e("SpotifyRepository", "Failed to load profile: ${response.code()} - $errorBody")
+                
+                val errorMessage = when (response.code()) {
+                    403 -> "Access denied. Please ensure your Spotify app has 'user-read-private' and 'user-read-email' scopes enabled."
+                    401 -> "Authentication expired. Please sign in again."
+                    else -> "Failed to load profile: ${response.code()}"
+                }
+                emit(Result.failure(Exception(errorMessage)))
             }
         } catch (e: Exception) {
             Log.e("SpotifyRepository", "Error loading profile", e)

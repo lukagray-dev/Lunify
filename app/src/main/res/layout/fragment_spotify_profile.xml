@@ -30,7 +30,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
-            android:textColor="?attr/colorOnSurface"
+            android:textColor="@color/textPrimary"
             android:textSize="24sp"
             android:textStyle="bold"
             app:layout_constraintEnd_toEndOf="parent"
@@ -44,7 +44,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="4dp"
-            android:textColor="?attr/colorOnSurfaceVariant"
+            android:textColor="@color/textSecondary"
             android:textSize="14sp"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
@@ -79,14 +79,14 @@
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
                         android:text="Followers"
-                        android:textColor="?attr/colorOnSurfaceVariant"
+                        android:textColor="@color/textSecondary"
                         android:textSize="14sp" />
 
                     <TextView
                         android:id="@+id/tvFollowers"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:textColor="?attr/colorOnSurface"
+                        android:textColor="@color/textPrimary"
                         android:textSize="16sp"
                         android:textStyle="bold"
                         tools:text="1.2K" />
@@ -95,7 +95,7 @@
                 <View
                     android:layout_width="match_parent"
                     android:layout_height="1dp"
-                    android:background="?attr/colorOutlineVariant" />
+                    android:background="@color/dividerColor" />
 
                 <!-- Country -->
                 <LinearLayout
@@ -109,14 +109,14 @@
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
                         android:text="Country"
-                        android:textColor="?attr/colorOnSurfaceVariant"
+                        android:textColor="@color/textSecondary"
                         android:textSize="14sp" />
 
                     <TextView
                         android:id="@+id/tvCountry"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:textColor="?attr/colorOnSurface"
+                        android:textColor="@color/textPrimary"
                         android:textSize="16sp"
                         android:textStyle="bold"
                         tools:text="US" />
@@ -125,7 +125,7 @@
                 <View
                     android:layout_width="match_parent"
                     android:layout_height="1dp"
-                    android:background="?attr/colorOutlineVariant" />
+                    android:background="@color/dividerColor" />
 
                 <!-- Subscription -->
                 <LinearLayout
@@ -139,14 +139,14 @@
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
                         android:text="Subscription"
-                        android:textColor="?attr/colorOnSurfaceVariant"
+                        android:textColor="@color/textSecondary"
                         android:textSize="14sp" />
 
                     <TextView
                         android:id="@+id/tvSubscription"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:textColor="?attr/colorOnSurface"
+                        android:textColor="@color/textPrimary"
                         android:textSize="16sp"
                         android:textStyle="bold"
                         tools:text="Premium" />

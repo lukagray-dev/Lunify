@@ -156,15 +156,17 @@
 
             <!-- Icon -->
             <ImageView
+                android:id="@+id/ivSignInIcon"
                 android:layout_width="80dp"
                 android:layout_height="80dp"
                 android:layout_marginBottom="24dp"
                 android:src="@drawable/ic_youtube"
-                android:contentDescription="YouTube"
+                android:contentDescription="Platform"
                 app:tint="@color/colorAccent"/>
 
             <!-- Title -->
             <TextView
+                android:id="@+id/tvSignInTitle"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="8dp"
@@ -175,6 +177,7 @@
 
             <!-- Description -->
             <TextView
+                android:id="@+id/tvSignInDescription"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginHorizontal="32dp"

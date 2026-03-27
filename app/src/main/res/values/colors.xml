@@ -78,4 +78,7 @@
     <!-- Video Player Bar -->
     <color name="videoPlayerBarBackground">#1A1A1A</color>
     <color name="videoPlayerBarAccent">#EC4899</color>
+    
+    <!-- Spotify Brand Color -->
+    <color name="spotifyGreen">#1DB954</color>
 </resources>
