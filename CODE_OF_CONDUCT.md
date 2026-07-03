@@ -1,33 +1,27 @@
-# Code of Conduct
-
-## Our Pledge
-
-We as contributors and maintainers pledge to make participation in Melodix a harassment-free experience for everyone, regardless of age, body size, disability, ethnicity, gender identity and expression, level of experience, nationality, personal appearance, race, religion, or sexual identity and orientation.
+﻿# Contributor Code of Conduct
 
 ## Our Standards
 
-**Expected behavior:**
+We expect all contributors and participants to:
 
-- Use welcoming and inclusive language
-- Be respectful of differing viewpoints and experiences
-- Gracefully accept constructive criticism
-- Focus on what is best for the community
-- Show empathy towards other community members
+- communicate respectfully and professionally;
+- focus discussions on technical outcomes and user value;
+- accept constructive feedback and collaborate in good faith;
+- avoid harassment, discrimination, or abusive behavior.
 
-**Unacceptable behavior:**
+## Unacceptable Behavior
 
-- Trolling, insulting/derogatory comments, and personal or political attacks
-- Public or private harassment
-- Publishing others' private information without explicit permission
-- Sexualized language or imagery
-- Other conduct which could reasonably be considered inappropriate in a professional setting
+- personal attacks, insults, or intimidation;
+- discriminatory language or conduct;
+- doxxing, threats, or sustained disruption of discussions;
+- knowingly submitting malicious code.
 
 ## Enforcement
 
-Instances of abusive, harassing, or otherwise unacceptable behavior may be reported by contacting the project maintainer at **<soumom764@gmail.com>**. All complaints will be reviewed and investigated promptly and fairly.
+The maintainers may remove, edit, or reject contributions and revoke participation
+for behavior that violates this Code of Conduct.
 
-Maintainers have the right and responsibility to remove, edit, or reject comments, commits, code, issues, and other contributions that do not align with this Code of Conduct, and may temporarily or permanently ban contributors for behaviors they deem inappropriate, threatening, offensive, or harmful.
+## Reporting
 
-## Attribution
-
-This Code of Conduct is adapted from the [Contributor Covenant](https://www.contributor-covenant.org), version 2.1.
+Report concerns privately to the maintainers through a private communication channel.
+Do not post sensitive conduct reports in public issue threads.

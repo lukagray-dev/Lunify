@@ -1,40 +1,26 @@
-# Security Policy
+﻿# Security Policy
 
-## Supported Versions
+## Supported Scope
 
-| Version | Supported |
-|---------|-----------|
-| 1.x     | ✅ Yes    |
-| < 1.0   | ❌ No     |
+Security reports are accepted for this repository's active code in:
 
+- `operon-rs/`
+- `tui/`
+- `gui/`
 ## Reporting a Vulnerability
 
-**Do not open a public GitHub issue for security vulnerabilities.**
+Please report vulnerabilities privately to the maintainers.
 
-Report security issues privately by emailing: **<soumom764@gmail.com>**
+- Do not open a public issue for a suspected security vulnerability.
+- Include reproduction steps, impact, and affected paths.
+- If possible, include a minimal proof of concept.
 
-Include:
+## Response Targets
 
-- Description of the vulnerability
-- Steps to reproduce
-- Potential impact
-- Your suggested fix (if any)
+- Initial acknowledgement: within 7 days
+- Triage and severity assessment: as soon as reproducible
+- Fix timeline: based on severity and exploitability
 
-You will receive an acknowledgment within **72 hours**. If the issue is confirmed, a patch will be prioritized and you will be credited in the release notes (unless you prefer to remain anonymous).
+## Disclosure
 
----
-
-## Scope
-
-Issues in scope:
-
-- WebRTC Duo connection security / session hijacking
-- Downloader engine executing unintended code
-- Unauthorized access to local media files
-- Data leakage over Duo sync
-
-Out of scope:
-
-- Vulnerabilities in yt-dlp itself (report to [yt-dlp upstream](https://github.com/yt-dlp/yt-dlp/security))
-- Issues on unsupported Android versions
-- Social engineering attacks
+Public disclosure should occur only after a fix is available or maintainers approve disclosure.

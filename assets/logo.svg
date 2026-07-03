@@ -1,1 +1,59 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 24 24"><path fill="#000000" d="M13.136 5.242A7 7 0 0 0 12 5.143a6.857 6.857 0 0 0-5.631 10.77c.471-.69 1.56-1.17 2.82-1.17c.865 0 1.65.227 2.207.596zm3.643 1.847c1.187 2.618.145 4.02.145 4.02c-.801-2.417-3.128-2.773-3.128-2.773s-1.539 8.25-1.539 8.357c0 .891-.947 1.645-2.237 1.872A6.86 6.86 0 0 0 18.857 12a6.83 6.83 0 0 0-2.078-4.912"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 108 108">
+  <!--
+    Lunify adaptive icon foreground.
+    Canvas: 108x108dp (Android adaptive icon spec).
+    Safe zone: center 72x72dp (x:18–90, y:18–90) — artwork stays within here
+    so all launcher mask shapes (circle, squircle, rounded square) display correctly.
+    Background: transparent — set your background layer in Android Studio.
+  -->
+  <defs>
+
+    <!--
+      Radial gradient for the crescent body.
+      Highlight offset toward top-left to simulate a light source,
+      giving the moon a spherical, premium feel.
+    -->
+    <radialGradient id="moonGradient" cx="38%" cy="35%" r="60%" fx="38%" fy="35%">
+      <stop offset="0%"   stop-color="#7b2fff"/>
+      <stop offset="48%"  stop-color="#4600d1"/>
+      <stop offset="100%" stop-color="#1a0052"/>
+    </radialGradient>
+
+    <!--
+      Crescent mask: render full circle in white (visible),
+      then punch out the offset circle in black (transparent).
+      The offset controls how thick/thin the crescent horns are.
+    -->
+    <mask id="crescentMask">
+      <!-- Full moon shape — defines outer boundary -->
+      <circle cx="54" cy="54" r="36" fill="white"/>
+      <!-- Subtractive circle — creates the crescent cutout -->
+      <!-- Offset: +11 right, -9 up — produces a classic crescent pointing right -->
+      <circle cx="65" cy="45" r="28" fill="black"/>
+    </mask>
+
+    <!--
+      Clip path matches the full moon circle.
+      Ensures the gradient rect doesn't bleed outside the circle boundary.
+    -->
+    <clipPath id="moonClip">
+      <circle cx="54" cy="54" r="36"/>
+    </clipPath>
+
+  </defs>
+
+  <!--
+    Crescent moon:
+    1. A rect filled with the radial gradient, clipped to the circle shape.
+    2. The crescentMask punches out the offset circle, leaving only the crescent.
+  -->
+  <g mask="url(#crescentMask)">
+    <rect
+      x="18" y="18"
+      width="72" height="72"
+      fill="url(#moonGradient)"
+      clip-path="url(#moonClip)"
+    />
+  </g>
+
+</svg>

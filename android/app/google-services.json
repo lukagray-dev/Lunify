@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "918275894416",
+    "firebase_url": "https://lunify-01-default-rtdb.asia-southeast1.firebasedatabase.app",
+    "project_id": "lunify-01",
+    "storage_bucket": "lunify-01.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:918275894416:android:d153cb181a0a28aaaffc15",
+        "android_client_info": {
+          "package_name": "com.android.lunify"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "918275894416-dksma3lo597vj1ph85kj10nfqe1f5iio.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.android.lunify",
+            "certificate_hash": "adcab46b6b5bd2d456f1896296f2f841fe992e82"
+          }
+        },
+        {
+          "client_id": "918275894416-vl1mqvkkgcmri7vrvd7c2lbg6en1h11s.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDO8fz8__8K714LuR0Ywg6ZLriVoSHN6og"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "918275894416-vl1mqvkkgcmri7vrvd7c2lbg6en1h11s.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

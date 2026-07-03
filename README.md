@@ -1,45 +1,39 @@
 <div align="center">
 
-<img src="assets/logo.png" alt="Melodix Logo" width="120" height="120" />
+<img src="assets\logo.svg" alt="Lunify Logo" width="120" height="120" />
 
-# **Melodix**
-
-**Play it. Download it. Share it — together.**
-
-[![Platform](https://img.shields.io/badge/Platform-Android-brightgreen?style=flat-square)](https://github.com/soumo-git/melodix/releases)
-[![License](https://img.shields.io/badge/License-MIT-blue?style=flat-square)](LICENSE)
-[![Engine](https://img.shields.io/badge/Download%20Engine-yt--dlp-red?style=flat-square)](https://github.com/yt-dlp/yt-dlp)
-[![Status](https://img.shields.io/badge/Status-Active-success?style=flat-square)]()
+# **Lunify**
 
 </div>
 
-## **What is Melodix?**
+## **What is Lunify?**
 
-Melodix is an all-in-one media player and downloader for Android. It plays your local files, downloads content from the internet, streams live previews without ads, and lets you and your partner listen to the same playlist together in perfect sync — no matter how far apart you are.
+Lunify is an all-in-one media player and downloader for Android. It plays your local files, downloads content from the internet, streams live previews without ads, and lets you and your partner listen to the same playlist together in perfect sync (no matter how far apart you are).
 
 > ***One app. No subscriptions. No limitations.***
 
-## **Features**
+<details>
+<summary><span style="font-size: 1.5em;">⚡ Features</span></summary>
 
-### 🎵 Offline Player
+### Offline Player
 
-Play virtually any audio or video file stored on your device. Melodix supports all major formats — MP3, FLAC, AAC, MP4, MKV, and more — with a clean, intuitive interface that gets out of your way.
+Play virtually any audio or video file stored on your device. Lunify supports all major formats — MP3, FLAC, AAC, MP4, MKV, and more — with a clean, intuitive interface that gets out of your way.
 
-### ⬇️ Downloader
+### Downloader
 
-Download music, videos, and entire playlists from YouTube and 1000+ other DRM-free websites. Melodix uses **yt-dlp** as its download engine — and the best part? The engine is upgradable directly from the app. No need to wait for a new app release every time yt-dlp updates; just hit upgrade and stay current.
+Download music, videos, and entire playlists from YouTube and 1000+ other DRM-free websites. Lunify uses **yt-dlp** as its download engine — and the best part? The engine is upgradable directly from the app. No need to wait for a new app release every time yt-dlp updates; just hit upgrade and stay current.
 
 > Supports audio-only downloads, video downloads, full playlist queuing — Basically everything.
 
-### 🔴 Live Preview
+### Live Preview
 
-Paste any supported link and watch it in Melodix — no redirects, no ads, no third-party browser. Clean inline playback, instantly.
+> Will be written
 
-### **💞 Duo — Listen Together**
+### **Duo — Listen Together**
 
-> *The feature that makes Melodix different from everyone.*
+> *The feature that makes Lunify different from everyone.*
 
-**Duo** lets two people stay in sync with the same playlist, no matter where they are in the world. Install *Melodix* on both devices, have the same playlist downloaded, connect — and enjoy together.
+**Duo** lets two people stay in sync with the same playlist, no matter where they are in the world. Install *Lunify* on both devices, have the same playlist downloaded, connect — and enjoy together.
 
 - **Long-distance sync** via WebRTC. Both devices stay perfectly in time over the internet.
 - **Offline / nearby sync** via Wi-Fi Direct. No internet needed — works even without a data connection if you're in the same room or building.
@@ -51,26 +45,15 @@ Paste any supported link and watch it in Melodix — no redirects, no ads, no th
 
 </div>
 
-## **Getting Started**
+</details>
 
-### Installation
+## Getting Started
 
-1. Go to the [Releases](https://github.com/soumo-git/melodix/releases) page.
-2. Download the latest `.apk`.
-3. Enable **Install from unknown sources** in your Android settings. (*This is safe*)
-4. Install and open Melodix.
-
-> Google Play listing coming soon. 🫷
-
-### Updating the Download Engine
-
-Melodix ships with a bundled version of yt-dlp. To update it independently: `Settings → Download Engine → Check for Updates → Update`
-
-No app reinstall needed.
+> *Lunify is currently in active development. Compiled binaries will be available soon.* 🫷
 
 ## Supported Sources
 
-Melodix's downloader works with any site supported by the current yt-dlp build. This includes YouTube, SoundCloud, Vimeo, and hundreds more. DRM-protected content is not supported.
+Lunify's downloader works with any site supported by the current yt-dlp build. This includes YouTube, SoundCloud, Vimeo, and hundreds more. *DRM-protected content is not supported.*
 
 For a full list of supported sites, refer to the [yt-dlp supported sites list](https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md).
 
@@ -85,12 +68,12 @@ Pull requests are welcome. For major changes, open an issue first to discuss wha
 
 ## License
 
-[MIT](LICENSE) © 2025 Soumo Mukherjee
+Lunify is licensed under the **GNU Affero General Public License v3.0 (AGPLv3)**. See [LICENSE](./LICENSE) for full terms.
 
 ---
 
 <div align="center">
 
-***Made with ❤️ for music lovers — and the people they miss.***
+***Made with ❤️ for music lovers and the people they miss.***
 
 </div>
