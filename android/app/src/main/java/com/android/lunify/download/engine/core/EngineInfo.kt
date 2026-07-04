@@ -1,38 +1,41 @@
 package com.android.lunify.download.engine.core
 
 /**
- * Information about a download engine
+ * Information about the bundled download engine.
+ *
+ * The app no longer exposes engine upgrades or replacement, so this model only
+ * tracks whether the runtime initialized successfully and which bundled version
+ * is currently active.
  */
 data class EngineInfo(
     val name: String,
     val installedVersion: String?,
-    val latestVersion: String?,
     val isInstalled: Boolean,
-    val isUpdateAvailable: Boolean,
     val lastChecked: Long,
     val binaryPath: String?
 ) {
     companion object {
-        fun notInstalled(name: String) = EngineInfo(
+        fun installed(
+            name: String,
+            installedVersion: String? = null,
+            lastChecked: Long = 0L,
+            binaryPath: String? = null,
+        ) = EngineInfo(
+            name = name,
+            installedVersion = installedVersion,
+            isInstalled = true,
+            lastChecked = lastChecked,
+            binaryPath = binaryPath
+        )
+
+        fun unavailable(name: String) = EngineInfo(
             name = name,
             installedVersion = null,
-            latestVersion = null,
             isInstalled = false,
-            isUpdateAvailable = false,
             lastChecked = 0L,
             binaryPath = null
         )
     }
-}
-
-/**
- * Engine update result
- */
-sealed class EngineUpdateResult {
-    data class Success(val newVersion: String) : EngineUpdateResult()
-    data class AlreadyUpToDate(val version: String) : EngineUpdateResult()
-    data class Failed(val error: String, val cause: Throwable? = null) : EngineUpdateResult()
-    object Downloading : EngineUpdateResult()
 }
 
 /**

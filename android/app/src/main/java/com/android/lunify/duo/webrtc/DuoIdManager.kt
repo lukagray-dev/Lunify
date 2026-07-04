@@ -4,7 +4,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.os.Build
 import android.util.Log
-import com.android.lunify.config.FirebaseConfig
+import com.android.lunify.core.config.FirebaseConfig
 import com.android.lunify.duo.webrtc.model.DuoUser
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.DataSnapshot

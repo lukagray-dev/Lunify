@@ -88,6 +88,18 @@
         app:layout_constraintTop_toTopOf="parent"
         app:tint="@color/textDark"/>
 
+    <!-- Loading Spinner (shown during stream extraction/buffering) -->
+    <ProgressBar
+        android:id="@+id/pbLoading"
+        android:layout_width="28dp"
+        android:layout_height="28dp"
+        android:layout_marginEnd="8dp"
+        android:indeterminate="true"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toStartOf="@id/btnNext"
+        app:layout_constraintTop_toTopOf="parent" />
+
     <!-- Next Button -->
     <ImageButton
         android:id="@+id/btnNext"

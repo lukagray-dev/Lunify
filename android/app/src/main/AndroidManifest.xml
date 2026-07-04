@@ -49,7 +49,7 @@
 
         <!-- Splash Activity -->
         <activity
-            android:name=".ui.activity.SplashActivity"
+            android:name=".splash.SplashActivity"
             android:exported="true"
             android:theme="@style/Theme.Music.Splash">
             <intent-filter>
@@ -60,38 +60,31 @@
 
         <!-- Main Activity -->
         <activity
-            android:name=".ui.activity.MainActivity"
+            android:name=".home.activity.MainActivity"
             android:exported="false"
             android:theme="@style/Theme.Music"
             android:windowSoftInputMode="adjustPan"/>
 
         <!-- Songs List Activity -->
         <activity
-            android:name=".ui.activity.SongsListActivity"
+            android:name=".home.activity.SongsListActivity"
             android:exported="false"
             android:theme="@style/Theme.Music"
-            android:parentActivityName=".ui.activity.MainActivity"/>
+            android:parentActivityName=".home.activity.MainActivity"/>
 
         <!-- Duo Songs List Activity -->
         <activity
             android:name=".duo.ui.activity.DuoSongsListActivity"
             android:exported="false"
             android:theme="@style/Theme.Music"
-            android:parentActivityName=".ui.activity.MainActivity"/>
-
-        <!-- Settings Activity -->
-        <activity
-            android:name=".settings.SettingsActivity"
-            android:exported="false"
-            android:theme="@style/Theme.Music"
-            android:parentActivityName=".ui.activity.MainActivity"/>
+            android:parentActivityName=".home.activity.MainActivity"/>
 
         <!-- Equalizer Activity -->
         <activity
             android:name=".equalizer.ui.EqualizerActivity"
             android:exported="false"
             android:theme="@style/Theme.Music"
-            android:parentActivityName=".ui.activity.MainActivity"/>
+            android:parentActivityName=".home.activity.MainActivity"/>
 
         <!-- Video Player Activity -->
         <activity
@@ -99,7 +92,7 @@
             android:exported="false"
             android:theme="@style/Theme.Music.VideoPlayer"
             android:configChanges="orientation|screenSize|keyboardHidden"
-            android:parentActivityName=".ui.activity.MainActivity"/>
+            android:parentActivityName=".home.activity.MainActivity"/>
 
         <!-- Local Video Player Activity -->
         <activity
@@ -107,27 +100,27 @@
             android:exported="false"
             android:theme="@style/Theme.Music.VideoPlayer"
             android:configChanges="orientation|screenSize|keyboardHidden"
-            android:parentActivityName=".ui.activity.MainActivity"/>
+            android:parentActivityName=".home.activity.MainActivity"/>
 
         <!-- Folder Contents Activity -->
         <activity
-            android:name=".ui.activity.FolderContentsActivity"
+            android:name=".folder.FolderContentsActivity"
             android:exported="false"
             android:theme="@style/Theme.Music"
-            android:parentActivityName=".ui.activity.MainActivity"/>
+            android:parentActivityName=".home.activity.MainActivity"/>
 
         <!-- Legal Document Activity -->
         <activity
             android:name=".legal.LegalDocumentActivity"
             android:exported="false"
             android:theme="@style/Theme.Music"
-            android:parentActivityName=".ui.activity.MainActivity"/>
+            android:parentActivityName=".home.activity.MainActivity"/>
 
 
 
         <!-- Music Service -->
         <service
-            android:name=".service.MusicService"
+            android:name=".player.service.MusicService"
             android:exported="false"
             android:foregroundServiceType="mediaPlayback"/>
 

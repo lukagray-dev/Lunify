@@ -1,7 +1,7 @@
 package com.android.lunify.duo.webrtc
 
 import android.util.Log
-import com.android.lunify.config.FirebaseConfig
+import com.android.lunify.core.config.FirebaseConfig
 import com.android.lunify.duo.webrtc.model.NotifyRequest
 import com.google.firebase.database.*
 import kotlinx.coroutines.channels.awaitClose

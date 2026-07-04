@@ -28,7 +28,6 @@ import com.android.lunify.download.data.model.DownloadStatus
 import com.android.lunify.download.data.model.ExtractedContent
 import com.android.lunify.download.ui.adapter.DownloadsAdapter
 import com.android.lunify.download.ui.viewmodel.DownloadsViewModel
-import com.android.lunify.settings.SettingsActivity
 import com.android.lunify.videoplayer.ui.VideoPlayerActivity
 import com.bumptech.glide.Glide
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
@@ -390,21 +389,12 @@ class DownloadsFragment : Fragment() {
             }
         }
 
-        viewModel.showEngineSetup.observe(viewLifecycleOwner) { show ->
-            if (show) {
-                showEngineSetupDialog()
-            }
-        }
-
         viewModel.engineInfo.observe(viewLifecycleOwner) { info ->
-            if (info?.isUpdateAvailable == true) {
-                binding.engineWarningBanner.visibility = View.VISIBLE
-                binding.tvEngineWarning.text = "Engine update available"
-            } else if (info?.isInstalled == false) {
-                binding.engineWarningBanner.visibility = View.VISIBLE
-                binding.tvEngineWarning.text = "Download engine not installed"
-            } else {
+            if (info?.isInstalled == true) {
                 binding.engineWarningBanner.visibility = View.GONE
+            } else {
+                binding.engineWarningBanner.visibility = View.VISIBLE
+                binding.tvEngineWarning.text = "Download engine unavailable"
             }
         }
         
@@ -602,24 +592,6 @@ class DownloadsFragment : Fragment() {
         }
         
         popup.show()
-    }
-
-    private fun showEngineSetupDialog() {
-        MaterialAlertDialogBuilder(requireContext())
-            .setTitle("Download Engine Required")
-            .setMessage("The download engine is not installed. Would you like to install it now?")
-            .setPositiveButton("Install") { _, _ ->
-                openSettings()
-            }
-            .setNegativeButton("Later") { _, _ ->
-                viewModel.dismissEngineSetup()
-            }
-            .show()
-    }
-
-    private fun openSettings() {
-        val intent = Intent(requireContext(), SettingsActivity::class.java)
-        startActivity(intent)
     }
 
     override fun onDestroyView() {

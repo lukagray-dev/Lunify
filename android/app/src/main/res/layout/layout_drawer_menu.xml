@@ -36,29 +36,6 @@
         android:layout_marginVertical="@dimen/spacing_md"
         android:background="@color/dividerColor"/>
 
-    <!-- Settings -->
-    <LinearLayout
-        android:id="@+id/menuSettings"
-        style="@style/DrawerItemStyle"
-        android:layout_width="match_parent"
-        android:layout_height="@dimen/drawer_item_height">
-
-        <ImageView
-            android:layout_width="@dimen/drawer_icon_size"
-            android:layout_height="@dimen/drawer_icon_size"
-            android:src="@drawable/ic_settings"
-            android:contentDescription="@null"/>
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="@dimen/spacing_lg"
-            android:text="@string/settings"
-            android:textColor="@color/textPrimary"
-            android:textSize="@dimen/text_size_lg"/>
-
-    </LinearLayout>
-
     <!-- Equalizer -->
     <LinearLayout
         android:id="@+id/menuEqualizer"
@@ -133,28 +110,5 @@
         android:layout_height="@dimen/divider_height"
         android:layout_marginVertical="@dimen/spacing_md"
         android:background="@color/dividerColor"/>
-
-    <!-- Update Automatically -->
-    <LinearLayout
-        android:id="@+id/menuUpdateAutomatically"
-        style="@style/DrawerItemStyle"
-        android:layout_width="match_parent"
-        android:layout_height="@dimen/drawer_item_height">
-
-        <ImageView
-            android:layout_width="@dimen/drawer_icon_size"
-            android:layout_height="@dimen/drawer_icon_size"
-            android:src="@drawable/ic_update"
-            android:contentDescription="@null"/>
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="@dimen/spacing_lg"
-            android:text="@string/update_automatically"
-            android:textColor="@color/textPrimary"
-            android:textSize="@dimen/text_size_lg"/>
-
-    </LinearLayout>
 
 </LinearLayout>

@@ -1,116 +1,84 @@
 <?xml version="1.0" encoding="utf-8"?>
-<com.google.android.material.card.MaterialCardView
+<!-- Layout for a saved playlist item in BrowsePlaylistsFragment -->
+<androidx.constraintlayout.widget.ConstraintLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_marginHorizontal="12dp"
-    android:layout_marginVertical="6dp"
+    android:padding="12dp"
     android:clickable="true"
     android:focusable="true"
-    android:foreground="?attr/selectableItemBackground"
-    app:cardBackgroundColor="@color/surfaceColor"
-    app:cardCornerRadius="12dp"
-    app:cardElevation="0dp"
-    app:strokeWidth="0dp">
+    android:background="?attr/selectableItemBackground">
 
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:gravity="center_vertical"
-        android:orientation="horizontal"
-        android:padding="12dp">
+    <!-- Playlist Thumbnail -->
+    <androidx.cardview.widget.CardView
+        android:id="@+id/cardThumbnail"
+        android:layout_width="56dp"
+        android:layout_height="56dp"
+        app:cardCornerRadius="8dp"
+        app:cardElevation="1dp"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent">
 
-        <!-- Playlist Thumbnail -->
-        <androidx.cardview.widget.CardView
-            android:layout_width="140dp"
-            android:layout_height="80dp"
-            app:cardCornerRadius="8dp"
-            app:cardElevation="0dp">
-
-            <FrameLayout
-                android:layout_width="match_parent"
-                android:layout_height="match_parent">
-
-                <ImageView
-                    android:id="@+id/ivPlaylistThumbnail"
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    android:scaleType="centerCrop"
-                    tools:src="@drawable/ic_music_note"/>
-
-                <!-- Video Count Overlay -->
-                <LinearLayout
-                    android:layout_width="wrap_content"
-                    android:layout_height="match_parent"
-                    android:layout_gravity="end"
-                    android:background="#DD000000"
-                    android:gravity="center"
-                    android:orientation="vertical"
-                    android:paddingHorizontal="10dp">
-
-                    <ImageView
-                        android:layout_width="22dp"
-                        android:layout_height="22dp"
-                        android:src="@drawable/ic_playlist"
-                        app:tint="@color/textPrimary"/>
-
-                    <TextView
-                        android:id="@+id/tvVideoCount"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="2dp"
-                        android:textColor="@color/textPrimary"
-                        android:textSize="13sp"
-                        android:textStyle="bold"
-                        tools:text="25"/>
-
-                </LinearLayout>
-
-            </FrameLayout>
-
-        </androidx.cardview.widget.CardView>
-
-        <!-- Playlist Info -->
-        <LinearLayout
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="16dp"
-            android:layout_weight="1"
-            android:orientation="vertical">
-
-            <TextView
-                android:id="@+id/tvPlaylistTitle"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:ellipsize="end"
-                android:maxLines="2"
-                android:textColor="@color/textPrimary"
-                android:textSize="15sp"
-                android:textStyle="bold"
-                tools:text="My Playlist"/>
-
-            <TextView
-                android:id="@+id/tvPlaylistInfo"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:textColor="@color/textSecondary"
-                android:textSize="13sp"
-                tools:text="25 videos"/>
-
-        </LinearLayout>
-
-        <!-- Arrow Icon -->
         <ImageView
-            android:layout_width="24dp"
-            android:layout_height="24dp"
-            android:layout_marginStart="8dp"
-            android:src="@drawable/ic_chevron_right"
-            app:tint="@color/textSecondary"
-            android:contentDescription="Open playlist"/>
+            android:id="@+id/ivPlaylistThumbnail"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:scaleType="centerCrop"
+            android:contentDescription="Playlist thumbnail"
+            tools:src="@drawable/ic_music_note"/>
+    </androidx.cardview.widget.CardView>
 
-    </LinearLayout>
+    <!-- Playlist Title -->
+    <TextView
+        android:id="@+id/tvPlaylistTitle"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="12dp"
+        android:layout_marginEnd="8dp"
+        android:ellipsize="end"
+        android:maxLines="2"
+        android:textColor="@color/textDark"
+        android:textSize="14sp"
+        app:layout_constraintBottom_toTopOf="@id/tvPlaylistInfo"
+        app:layout_constraintEnd_toStartOf="@id/btnOptions"
+        app:layout_constraintStart_toEndOf="@id/cardThumbnail"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintVertical_chainStyle="packed"
+        tools:text="My Favourite Playlist"/>
 
-</com.google.android.material.card.MaterialCardView>
+    <!-- Playlist Info (track count) -->
+    <TextView
+        android:id="@+id/tvPlaylistInfo"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="12dp"
+        android:layout_marginEnd="8dp"
+        android:layout_marginTop="2dp"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:textColor="@color/textDarkSecondary"
+        android:textSize="12sp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toStartOf="@id/btnOptions"
+        app:layout_constraintStart_toEndOf="@id/cardThumbnail"
+        app:layout_constraintTop_toBottomOf="@id/tvPlaylistTitle"
+        tools:text="12 tracks"/>
+
+    <!-- Options/Delete button -->
+    <ImageButton
+        android:id="@+id/btnOptions"
+        android:layout_width="36dp"
+        android:layout_height="36dp"
+        android:background="@drawable/ripple_circle"
+        android:src="@drawable/ic_close"
+        android:padding="8dp"
+        android:contentDescription="Delete playlist"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        app:tint="@color/textDarkSecondary"/>
+
+</androidx.constraintlayout.widget.ConstraintLayout>

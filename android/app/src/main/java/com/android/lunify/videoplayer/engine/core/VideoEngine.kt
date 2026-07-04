@@ -4,9 +4,9 @@ import androidx.media3.ui.PlayerView
 import kotlinx.coroutines.flow.StateFlow
 
 /**
- * Core interface for video player engines.
- * This abstraction allows swapping different video engines (ExoPlayer, VLC, IJKPlayer, etc.)
- * without changing the rest of the application.
+ * Core interface for the bundled video playback engine.
+ * ExoPlayer is used directly by the app, so this contract focuses on playback
+ * behavior and not on engine swapping or version management.
  */
 interface VideoEngine {
     
@@ -16,13 +16,13 @@ interface VideoEngine {
     val engineName: String
     
     /**
-     * Get the current installed version of the engine
-     * Returns null if engine is not installed
+     * Get the current installed version of the engine.
+     * Returns null only if initialization failed.
      */
     suspend fun getInstalledVersion(): String?
     
     /**
-     * Check if the engine is properly installed and ready to use
+     * Check if the engine is properly initialized and ready to use.
      */
     suspend fun isInstalled(): Boolean
     
@@ -169,41 +169,6 @@ data class VideoQuality(
         val QUALITY_480P = VideoQuality("480p", "480p", 854, 480)
         val QUALITY_720P = VideoQuality("720p", "720p", 1280, 720)
     }
-}
-
-/**
- * Video engine information
- */
-data class VideoEngineInfo(
-    val name: String,
-    val installedVersion: String?,
-    val latestVersion: String?,
-    val isInstalled: Boolean,
-    val isUpdateAvailable: Boolean,
-    val lastChecked: Long,
-    val enginePath: String?
-) {
-    companion object {
-        fun notInstalled(name: String) = VideoEngineInfo(
-            name = name,
-            installedVersion = null,
-            latestVersion = null,
-            isInstalled = false,
-            isUpdateAvailable = false,
-            lastChecked = 0L,
-            enginePath = null
-        )
-    }
-}
-
-/**
- * Video engine update result
- */
-sealed class VideoEngineUpdateResult {
-    data class Success(val newVersion: String) : VideoEngineUpdateResult()
-    data class AlreadyUpToDate(val version: String) : VideoEngineUpdateResult()
-    data class Failed(val error: String, val cause: Throwable? = null) : VideoEngineUpdateResult()
-    object Downloading : VideoEngineUpdateResult()
 }
 
 /**

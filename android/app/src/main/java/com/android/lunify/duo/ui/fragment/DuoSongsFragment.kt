@@ -14,7 +14,7 @@ import com.android.lunify.databinding.FragmentDuoSongsBinding
 import com.android.lunify.duo.chat.ui.DuoChatBottomSheet
 import com.android.lunify.duo.data.model.DuoSortOption
 import com.android.lunify.duo.ui.viewmodel.DuoViewModel
-import com.android.lunify.ui.adapter.SongAdapter
+import com.android.lunify.home.adapter.SongAdapter
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 

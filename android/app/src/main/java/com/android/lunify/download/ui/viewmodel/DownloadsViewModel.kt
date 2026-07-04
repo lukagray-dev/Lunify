@@ -11,15 +11,17 @@ import com.android.lunify.download.data.model.DownloadFormat
 import com.android.lunify.download.data.model.DownloadItem
 import com.android.lunify.download.data.model.DownloadStatus
 import com.android.lunify.download.data.model.ExtractedContent
+import com.android.lunify.download.engine.core.DownloadEngine
 import com.android.lunify.download.engine.core.DownloadProgressStatus
 import com.android.lunify.download.engine.core.EngineInfo
-import com.android.lunify.download.engine.core.EngineNotInstalledException
 import com.android.lunify.download.engine.manager.EngineManager
 import com.android.lunify.download.engine.manager.EngineManagerFactory
 import com.android.lunify.download.manager.DownloadStateManager
 import com.android.lunify.videoplayer.preview.PreviewManager
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.UUID
 import com.google.gson.Gson
@@ -54,9 +56,6 @@ class DownloadsViewModel : ViewModel() {
 
     private val _engineInfo = MutableLiveData<EngineInfo?>()
     val engineInfo: LiveData<EngineInfo?> = _engineInfo
-
-    private val _showEngineSetup = MutableLiveData<Boolean>(false)
-    val showEngineSetup: LiveData<Boolean> = _showEngineSetup
     
     // Emoji error event - emits when playlist name contains emojis
     private val _emojiError = MutableLiveData<String?>()
@@ -100,11 +99,10 @@ class DownloadsViewModel : ViewModel() {
         // Load any previously saved completed downloads
         loadSavedDownloads()
         
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             engineManager?.initialize()
             engineManager?.engineInfo?.collectLatest { info ->
                 _engineInfo.postValue(info)
-                _showEngineSetup.postValue(!info.isInstalled)
             }
         }
     }
@@ -261,6 +259,20 @@ class DownloadsViewModel : ViewModel() {
     }
 
     /**
+     * Fetch the bundled engine, initializing it on demand when the first call
+     * arrives before the startup coroutine finishes.
+     */
+    private suspend fun getOrInitEngine(): DownloadEngine? = withContext(Dispatchers.IO) {
+        val currentEngine = engineManager?.getEngine()
+        if (currentEngine != null) {
+            return@withContext currentEngine
+        }
+
+        engineManager?.initialize()
+        engineManager?.getEngine()
+    }
+
+    /**
      * Extract content from URL with preview URL caching.
      * PreviewManager handles cache clearing internally when URL changes.
      */
@@ -285,13 +297,7 @@ class DownloadsViewModel : ViewModel() {
                     _extractionSuccess.value = content
                 }.onFailure { e ->
                     Log.e(TAG, "Extraction failed: ${e.message}")
-                    when (e) {
-                        is EngineNotInstalledException -> {
-                            _showEngineSetup.value = true
-                            _error.value = "Download engine not installed. Please install it first."
-                        }
-                        else -> _error.value = "Failed to extract: ${e.message}"
-                    }
+                    _error.value = "Failed to extract: ${e.message}"
                 }
                 
             } catch (e: Exception) {
@@ -349,10 +355,9 @@ class DownloadsViewModel : ViewModel() {
             try {
                 _isLoading.value = true
                 
-                val engine = engineManager?.getEngine()
+                val engine = getOrInitEngine()
                 if (engine == null) {
-                    _showEngineSetup.value = true
-                    _error.value = "Download engine not installed"
+                    _error.value = "Download engine unavailable"
                     return@launch
                 }
                 
@@ -405,10 +410,9 @@ class DownloadsViewModel : ViewModel() {
     fun extractAndDownload(url: String, formatId: String, videoId: String) {
         viewModelScope.launch {
             try {
-                val engine = engineManager?.getEngine()
+                val engine = getOrInitEngine()
                 if (engine == null) {
-                    _showEngineSetup.value = true
-                    _error.value = "Download engine not installed. Please install it first."
+                    _error.value = "Download engine unavailable"
                     DownloadStateManager.setState(videoId, DownloadStateManager.DownloadState.FAILED)
                     return@launch
                 }
@@ -424,13 +428,7 @@ class DownloadsViewModel : ViewModel() {
                 }.onFailure { e ->
                     Log.e(TAG, "Extraction failed: ${e.message}")
                     DownloadStateManager.setState(videoId, DownloadStateManager.DownloadState.FAILED)
-                    when (e) {
-                        is EngineNotInstalledException -> {
-                            _showEngineSetup.value = true
-                            _error.value = "Download engine not installed. Please install it first."
-                        }
-                        else -> _error.value = "Failed to extract: ${e.message}"
-                    }
+                    _error.value = "Failed to extract: ${e.message}"
                 }
                 
             } catch (e: Exception) {
@@ -444,10 +442,9 @@ class DownloadsViewModel : ViewModel() {
     private fun startDownloadWithVideoId(content: ExtractedContent, formatId: String, videoId: String) {
         viewModelScope.launch {
             try {
-                val engine = engineManager?.getEngine()
+                val engine = getOrInitEngine()
                 if (engine == null) {
-                    _showEngineSetup.value = true
-                    _error.value = "Download engine not installed"
+                    _error.value = "Download engine unavailable"
                     DownloadStateManager.setState(videoId, DownloadStateManager.DownloadState.FAILED)
                     return@launch
                 }
@@ -534,10 +531,9 @@ class DownloadsViewModel : ViewModel() {
     fun startDownload(content: ExtractedContent, formatId: String) {
         viewModelScope.launch {
             try {
-                val engine = engineManager?.getEngine()
+                val engine = getOrInitEngine()
                 if (engine == null) {
-                    _showEngineSetup.value = true
-                    _error.value = "Download engine not installed"
+                    _error.value = "Download engine unavailable"
                     return@launch
                 }
                 
@@ -670,7 +666,7 @@ class DownloadsViewModel : ViewModel() {
 
     fun cancelDownload(downloadId: String) {
         viewModelScope.launch {
-            engineManager?.getEngine()?.cancelDownload(downloadId)
+            getOrInitEngine()?.cancelDownload(downloadId)
             
             val currentDownloads = _downloads.value?.toMutableList() ?: return@launch
             val index = currentDownloads.indexOfFirst { it.id == downloadId }
@@ -713,10 +709,6 @@ class DownloadsViewModel : ViewModel() {
 
     fun clearExtractionSuccess() {
         _extractionSuccess.value = null
-    }
-
-    fun dismissEngineSetup() {
-        _showEngineSetup.value = false
     }
     
     fun clearEmojiError() {

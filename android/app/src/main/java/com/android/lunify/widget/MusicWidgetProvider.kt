@@ -10,8 +10,8 @@ import android.os.Build
 import android.widget.RemoteViews
 import com.android.lunify.R
 import com.android.lunify.data.model.Song
-import com.android.lunify.service.MusicService
-import com.android.lunify.ui.activity.MainActivity
+import com.android.lunify.player.service.MusicService
+import com.android.lunify.home.activity.MainActivity
 
 class MusicWidgetProvider : AppWidgetProvider() {
 

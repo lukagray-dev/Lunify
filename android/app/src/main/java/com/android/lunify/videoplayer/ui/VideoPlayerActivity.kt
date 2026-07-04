@@ -21,7 +21,6 @@ import androidx.media3.exoplayer.source.MergingMediaSource
 import androidx.media3.ui.AspectRatioFrameLayout
 import com.android.lunify.R
 import com.android.lunify.databinding.ActivityVideoPlayerBinding
-import com.android.lunify.videoplayer.engine.manager.VideoEngineManagerFactory
 import com.android.lunify.videoplayer.preview.PreviewManager
 
 /**
@@ -99,20 +98,9 @@ class VideoPlayerActivity : AppCompatActivity() {
             return
         }
         
-        // Check if video engine is installed
-        if (!isEngineInstalled()) {
-            showEngineNotInstalledDialog()
-            return
-        }
-        
         setupUI()
         enableImmersiveMode()
         initializePlayer()
-    }
-    
-    private fun isEngineInstalled(): Boolean {
-        val engineManager = VideoEngineManagerFactory.getInstance(applicationContext)
-        return engineManager.getEngine() != null
     }
     
     private fun setupUI() {
@@ -309,21 +297,7 @@ class VideoPlayerActivity : AppCompatActivity() {
         }
     }
     
-    private fun showEngineNotInstalledDialog() {
-        androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("Video Engine Not Installed")
-            .setMessage("The video playback engine is not installed. Please install it from Settings.")
-            .setPositiveButton("Go to Settings") { _, _ ->
-                startActivity(Intent(this, com.android.lunify.settings.SettingsActivity::class.java))
-                finish()
-            }
-            .setNegativeButton("Cancel") { _, _ ->
-                finish()
-            }
-            .setCancelable(false)
-            .show()
-    }
-    
+
     private fun savePositionAndFinish() {
         // Save current position for resume
         exoPlayer?.let { player ->

@@ -2,7 +2,7 @@ package com.android.lunify.duo.webrtc
 
 import android.os.Build
 import android.util.Log
-import com.android.lunify.config.FirebaseConfig
+import com.android.lunify.core.config.FirebaseConfig
 import com.android.lunify.duo.webrtc.model.PresenceStatus
 import com.google.firebase.database.*
 import kotlinx.coroutines.suspendCancellableCoroutine

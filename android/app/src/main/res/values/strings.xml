@@ -16,12 +16,10 @@
     <!-- Navigation Drawer -->
     <string name="nav_drawer_open">Open navigation drawer</string>
     <string name="nav_drawer_close">Close navigation drawer</string>
-    <string name="settings">Settings</string>
     <string name="equalizer">Equalizer</string>
     <string name="player_style">Player styles</string>
     <string name="user_agreement">User Agreement</string>
     <string name="privacy_policy">Privacy Policy</string>
-    <string name="update_automatically">Update automatically</string>
     
     <!-- Search -->
     <string name="search_hint">Search songs, playlists, and artists</string>

@@ -14,9 +14,9 @@ import com.android.lunify.R
 import com.android.lunify.data.model.Song
 import com.android.lunify.databinding.ActivitySongsListBinding
 import com.android.lunify.databinding.LayoutPlayerBarBinding
-import com.android.lunify.service.MusicService
-import com.android.lunify.ui.adapter.SongAdapter
-import com.android.lunify.ui.fragment.PlayerSheetFragment
+import com.android.lunify.player.service.MusicService
+import com.android.lunify.home.adapter.SongAdapter
+import com.android.lunify.player.sheet.PlayerSheetFragment
 
 /**
  * Activity to display songs list in Duo mode
@@ -172,14 +172,14 @@ class DuoSongsListActivity : AppCompatActivity() {
         playerBarBinding.tvPlayerTitle.text = song.title
         playerBarBinding.tvPlayerSubtitle.text = song.artist
         
-        com.android.lunify.util.AlbumArtUtil.loadAlbumArtWithFallback(
+        com.android.lunify.core.util.AlbumArtUtil.loadAlbumArtWithFallback(
             com.bumptech.glide.Glide.with(this),
             playerBarBinding.ivPlayerThumbnail,
             song,
             44
         )
         
-        com.android.lunify.util.AlbumArtUtil.applyPlayerBarTheming(
+        com.android.lunify.core.util.AlbumArtUtil.applyPlayerBarTheming(
             playerBarBinding.root,
             song
         )

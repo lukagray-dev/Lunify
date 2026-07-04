@@ -10,7 +10,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.android.lunify.databinding.FragmentDuoVideosBinding
 import com.android.lunify.duo.ui.viewmodel.DuoViewModel
-import com.android.lunify.ui.adapter.VideoAdapter
+import com.android.lunify.home.adapter.VideoAdapter
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 

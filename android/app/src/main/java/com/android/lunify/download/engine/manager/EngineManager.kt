@@ -3,13 +3,13 @@ package com.android.lunify.download.engine.manager
 import android.content.Context
 import com.android.lunify.download.engine.core.DownloadEngine
 import com.android.lunify.download.engine.core.EngineInfo
-import com.android.lunify.download.engine.core.EngineUpdateResult
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 
 /**
- * Manages download engine lifecycle including installation, updates, and version checking.
- * This is the main entry point for engine management operations.
+ * Manages the bundled download engine lifecycle.
+ *
+ * The app initializes yt-dlp at startup and keeps it available for the rest of
+ * the session. There is no user-facing install, replace, or update flow here.
  */
 interface EngineManager {
     
@@ -19,41 +19,16 @@ interface EngineManager {
     val engineInfo: StateFlow<EngineInfo>
     
     /**
-     * Whether an update operation is in progress
-     */
-    val isUpdating: StateFlow<Boolean>
-    
-    /**
-     * Update progress (0-100) when downloading engine
-     */
-    val updateProgress: StateFlow<Int>
-    
-    /**
-     * Initialize the engine manager
-     * Should be called when the app starts
+     * Initialize the bundled engine.
+     * Should be called when the app starts or before the first extraction.
      */
     suspend fun initialize()
     
     /**
      * Get the current download engine instance
-     * Returns null if engine is not installed
+     * Returns null if the bundled runtime failed to initialize
      */
     fun getEngine(): DownloadEngine?
-    
-    /**
-     * Check for engine updates
-     * 
-     * @param forceCheck If true, bypasses cache and checks remote
-     * @return EngineInfo with latest version information
-     */
-    suspend fun checkForUpdates(forceCheck: Boolean = false): EngineInfo
-    
-    /**
-     * Install or update the engine to the latest version
-     * 
-     * @return Flow emitting update progress and result
-     */
-    fun installOrUpdate(): Flow<EngineUpdateResult>
     
     /**
      * Get the path where engine binaries are stored
@@ -64,11 +39,6 @@ interface EngineManager {
      * Clear engine cache and temporary files
      */
     suspend fun clearCache()
-    
-    /**
-     * Uninstall the engine completely
-     */
-    suspend fun uninstall()
 }
 
 /**
@@ -86,7 +56,6 @@ object EngineManagerFactory {
     }
     
     private fun createEngineManager(context: Context): EngineManager {
-        // Use the Android-native yt-dlp library (embeds Python + yt-dlp)
         return YtDlpAndroidEngineManager(context.applicationContext)
     }
 }

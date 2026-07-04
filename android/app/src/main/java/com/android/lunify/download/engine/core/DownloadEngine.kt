@@ -5,9 +5,9 @@ import com.android.lunify.download.data.model.ExtractedContent
 import kotlinx.coroutines.flow.Flow
 
 /**
- * Core interface for download engines.
- * This abstraction allows swapping different download engines (yt-dlp, youtube-dl, etc.)
- * without changing the rest of the application.
+ * Core interface for the bundled download engine.
+ * The app ships with yt-dlp preconfigured, so this contract focuses on
+ * initialization, extraction, and download behavior rather than engine swapping.
  */
 interface DownloadEngine {
     
@@ -17,8 +17,8 @@ interface DownloadEngine {
     val engineName: String
     
     /**
-     * Get the current installed version of the engine
-     * Returns null if engine is not installed
+     * Get the current installed version of the engine.
+     * Returns null only if the bundled runtime could not be initialized.
      */
     suspend fun getInstalledVersion(): String?
     
@@ -93,6 +93,4 @@ enum class DownloadProgressStatus {
  * Exception thrown when engine operations fail
  */
 open class EngineException(message: String, cause: Throwable? = null) : Exception(message, cause)
-
-class EngineNotInstalledException(message: String = "Download engine is not installed") : EngineException(message)
 class ExtractionFailedException(message: String, cause: Throwable? = null) : EngineException(message, cause)

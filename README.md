@@ -21,9 +21,9 @@ Play virtually any audio or video file stored on your device. Lunify supports al
 
 ### Downloader
 
-Download music, videos, and entire playlists from YouTube and 1000+ other DRM-free websites. Lunify uses **yt-dlp** as its download engine — and the best part? The engine is upgradable directly from the app. No need to wait for a new app release every time yt-dlp updates; just hit upgrade and stay current.
+Download music, videos, and entire playlists from YouTube and 1000+ other DRM-free websites. Lunify uses **yt-dlp** as its bundled download engine, and updates are handled through app releases instead of an in-app upgrade screen.
 
-> Supports audio-only downloads, video downloads, full playlist queuing — Basically everything.
+> Supports audio-only downloads, video downloads, full playlist queuing — basically everything.
 
 ### Live Preview
 

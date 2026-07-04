@@ -120,8 +120,9 @@ object PreviewManager {
             }
             
             val engineManager = EngineManagerFactory.getInstance(context)
+            engineManager.initialize()
             val engine = engineManager.getEngine()
-                ?: return@withContext Result.failure(Exception("Download engine not installed"))
+                ?: return@withContext Result.failure(Exception("Download engine unavailable"))
 
             val ytDlpEngine = engine as? YtDlpAndroidEngine ?: return@withContext Result.failure(
                 Exception("Preview requires yt-dlp engine")

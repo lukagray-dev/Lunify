@@ -11,7 +11,7 @@ import androidx.recyclerview.widget.GridLayoutManager
 import com.android.lunify.databinding.FragmentDuoAlbumsBinding
 import com.android.lunify.duo.ui.activity.DuoSongsListActivity
 import com.android.lunify.duo.ui.viewmodel.DuoViewModel
-import com.android.lunify.ui.adapter.AlbumAdapter
+import com.android.lunify.home.adapter.AlbumAdapter
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
