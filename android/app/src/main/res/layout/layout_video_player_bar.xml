@@ -76,7 +76,6 @@
             android:singleLine="true"
             android:textColor="@color/textPrimary"
             android:textSize="13sp"
-            android:fontFamily="sans-serif-medium"
             tools:text="Video Title - Sample Video"/>
 
         <TextView

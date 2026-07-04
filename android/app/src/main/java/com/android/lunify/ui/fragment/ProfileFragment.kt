@@ -89,8 +89,9 @@ class ProfileFragment : Fragment() {
             openDuoIdBottomSheet()
         }
         
+        binding.menuPlaylistConverter.visibility = View.GONE
         binding.menuPlaylistConverter.setOnClickListener {
-            openPlaylistConverter()
+            // Disabled: Playlist converter files deleted
         }
         
         binding.menuUserAgreement.setOnClickListener {
@@ -226,11 +227,7 @@ class ProfileFragment : Fragment() {
     }
     
     private fun openPlaylistConverter() {
-        val converterFragment = com.android.lunify.converter.ui.fragment.PlaylistConverterFragment.newInstance()
-        parentFragmentManager.beginTransaction()
-            .replace(R.id.profileContainer, converterFragment)
-            .addToBackStack("PlaylistConverter")
-            .commit()
+        // Disabled: Playlist converter files deleted
     }
     
     private fun openUserAgreement() {

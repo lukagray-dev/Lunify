@@ -4,24 +4,36 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.PopupMenu
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
 import androidx.recyclerview.widget.LinearLayoutManager
-import com.android.lunify.browse.data.model.YouTubeVideo
-import com.android.lunify.browse.ui.adapter.YouTubeVideoAdapter
+import androidx.recyclerview.widget.RecyclerView
+import com.android.lunify.browse.ui.adapter.HomeFeedAdapter
+import com.android.lunify.browse.ui.util.playOnlineTrack
+import com.android.lunify.browse.ui.viewmodel.BrowseCategory
 import com.android.lunify.browse.ui.viewmodel.BrowseViewModel
 import com.android.lunify.databinding.FragmentBrowseHomeBinding
-import com.android.lunify.download.manager.DownloadStateManager
-import com.android.lunify.download.ui.viewmodel.DownloadsViewModel
 
+/**
+ * A sub-fragment within Browse that loads a dynamic feed of carousels.
+ * Used for "Home", "Movies", and "TV Shows" discovery.
+ */
 class BrowseHomeFragment : Fragment() {
 
     private var _binding: FragmentBrowseHomeBinding? = null
     private val binding get() = _binding!!
+
     private val viewModel: BrowseViewModel by activityViewModels()
-    private val downloadsViewModel: DownloadsViewModel by activityViewModels()
-    private lateinit var videoAdapter: YouTubeVideoAdapter
+    private var tabId: String = "home"
+    private var category: BrowseCategory = BrowseCategory.MUSIC
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        arguments?.let {
+            tabId = it.getString(ARG_TAB_ID) ?: "home"
+            category = BrowseCategory.valueOf(it.getString(ARG_CATEGORY) ?: BrowseCategory.MUSIC.name)
+        }
+    }
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -34,112 +46,63 @@ class BrowseHomeFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        downloadsViewModel.initialize(requireContext())
         setupRecyclerView()
-        setupSwipeRefresh()
+        setupSwipeToRefresh()
         observeViewModel()
-        
-        // Only load if we don't have cached content
-        if (viewModel.homeContent.value == null) {
-            viewModel.loadHomeContent()
-        }
     }
 
     private fun setupRecyclerView() {
-        videoAdapter = YouTubeVideoAdapter(
-            onVideoClick = { video ->
-                viewModel.playVideo(video)
-                // Navigate to video player
-                (parentFragment as? BrowseFragment)?.openVideoPlayer(video)
-            },
-            onChannelClick = { video ->
-                // Navigate to channel
-                (parentFragment as? BrowseFragment)?.openChannelById(video.channelId)
-            },
-            onDownloadClick = { video, anchor ->
-                showDownloadMenu(video, anchor)
-            }
-        )
-        binding.recyclerView.apply {
-            layoutManager = LinearLayoutManager(requireContext())
-            adapter = videoAdapter
-        }
-    }
-    
-    private fun showDownloadMenu(video: YouTubeVideo, anchor: View) {
-        val popup = PopupMenu(requireContext(), anchor)
-        popup.menu.add("Video + Audio")
-        popup.menu.add("Audio only")
-        
-        popup.setOnMenuItemClickListener { menuItem ->
-            val formatId = when (menuItem.title) {
-                "Video + Audio" -> "best"
-                "Audio only" -> "bestaudio"
-                else -> "best"
-            }
-            
-            // Set extracting state
-            DownloadStateManager.setState(video.id, DownloadStateManager.DownloadState.EXTRACTING, formatId = formatId)
-            
-            val videoUrl = "https://www.youtube.com/watch?v=${video.id}"
-            
-            // Extract content first
-            downloadsViewModel.extractAndDownload(videoUrl, formatId, video.id)
-            
-            true
-        }
-        
-        popup.show()
+        binding.recyclerView.layoutManager = LinearLayoutManager(requireContext(), RecyclerView.VERTICAL, false)
     }
 
-    private fun setupSwipeRefresh() {
+    private fun setupSwipeToRefresh() {
         binding.swipeRefresh.setOnRefreshListener {
-            if (viewModel.isSearchMode.value == true) {
-                viewModel.searchQuery.value?.let { viewModel.search(it) }
-            } else {
-                viewModel.loadHomeContent()
-            }
+            viewModel.loadCategoryFeed(category, tabId, forceRefresh = true)
         }
     }
 
     private fun observeViewModel() {
-        // Observe home content
-        viewModel.homeContent.observe(viewLifecycleOwner) { content ->
-            if (viewModel.isSearchMode.value != true) {
-                val allVideos = content.trendingVideos + content.recommendedVideos
-                videoAdapter.submitList(allVideos.distinctBy { it.id })
+        val targetLiveData = when (category) {
+            BrowseCategory.MUSIC -> viewModel.musicHomeFeed
+            BrowseCategory.VIDEOS -> when (tabId) {
+                "home" -> viewModel.videoHomeFeed
+                "movies" -> viewModel.videoMoviesFeed
+                "tv_shows" -> viewModel.videoTvShowsFeed
+                else -> viewModel.videoHomeFeed
             }
-            binding.swipeRefresh.isRefreshing = false
         }
 
-        // Observe search results
-        viewModel.searchResults.observe(viewLifecycleOwner) { searchResult ->
-            if (viewModel.isSearchMode.value == true) {
-                videoAdapter.submitList(searchResult.videos)
-            }
+        targetLiveData.observe(viewLifecycleOwner) { sections ->
             binding.swipeRefresh.isRefreshing = false
-        }
-
-        // Observe search mode changes
-        viewModel.isSearchMode.observe(viewLifecycleOwner) { isSearchMode ->
-            if (!isSearchMode) {
-                // Restore home content when search is cleared
-                viewModel.homeContent.value?.let { content ->
-                    val allVideos = content.trendingVideos + content.recommendedVideos
-                    videoAdapter.submitList(allVideos.distinctBy { it.id })
+            if (sections != null) {
+                binding.recyclerView.adapter = HomeFeedAdapter(sections) { track ->
+                    playOnlineTrack(this, viewModel, track, category)
                 }
             }
         }
 
-        viewModel.isLoading.observe(viewLifecycleOwner) { isLoading ->
-            if (!isLoading) {
-                binding.swipeRefresh.isRefreshing = false
-            }
+        // Lazy load the feed if it is empty when first mounted
+        if (targetLiveData.value.isNullOrEmpty()) {
+            viewModel.loadCategoryFeed(category, tabId, forceRefresh = false)
         }
     }
 
     override fun onDestroyView() {
         super.onDestroyView()
         _binding = null
+    }
+
+    companion object {
+        private const val ARG_TAB_ID = "arg_tab_id"
+        private const val ARG_CATEGORY = "arg_category"
+
+        fun newInstance(tabId: String, category: BrowseCategory): BrowseHomeFragment {
+            return BrowseHomeFragment().apply {
+                arguments = Bundle().apply {
+                    putString(ARG_TAB_ID, tabId)
+                    putString(ARG_CATEGORY, category.name)
+                }
+            }
+        }
     }
 }

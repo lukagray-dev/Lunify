@@ -18,6 +18,9 @@
         <item name="android:windowSharedElementExitTransition">@android:transition/move</item>
         <item name="android:windowAllowEnterTransitionOverlap">true</item>
         <item name="android:windowAllowReturnTransitionOverlap">true</item>
+        <!-- Global custom font -->
+        <item name="fontFamily">@font/google_sans</item>
+        <item name="android:fontFamily">@font/google_sans</item>
     </style>
 
     <!-- Splash Screen Theme -->
@@ -190,5 +193,12 @@
     <style name="DuoIdBottomSheetModalStyle" parent="Widget.Design.BottomSheet.Modal">
         <item name="android:background">@android:color/transparent</item>
         <item name="behavior_skipCollapsed">true</item>
+    </style>
+
+    <!-- Duo Chat Bottom Sheet Theme -->
+    <style name="DuoChatBottomSheetTheme" parent="Theme.MaterialComponents.Light.BottomSheetDialog">
+        <item name="android:windowSoftInputMode">adjustResize</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@color/backgroundColor</item>
     </style>
 </resources>

@@ -112,7 +112,8 @@ class YtDlpAndroidEngine(
             
             // Check if it's a playlist URL
             val isPlaylist = url.contains("playlist") || url.contains("list=") || 
-                            url.contains("/playlist/") || url.contains("dailymotion")
+                            url.contains("/playlist/") || url.contains("dailymotion") ||
+                            url.contains("ytsearch")
             
             if (isPlaylist) {
                 // For playlists, use a special request to get all items

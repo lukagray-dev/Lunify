@@ -41,8 +41,7 @@
                 android:layout_marginStart="8dp"
                 android:text="@string/shuffle_playback"
                 android:textColor="@android:color/white"
-                android:textSize="14sp"
-                android:fontFamily="sans-serif-medium" />
+                android:textSize="14sp" />
 
         </LinearLayout>
         

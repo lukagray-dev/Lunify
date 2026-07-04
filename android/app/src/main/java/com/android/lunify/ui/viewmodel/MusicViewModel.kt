@@ -207,6 +207,7 @@ class MusicViewModel : ViewModel() {
         _isPlaying.value = isPlaying
         song?.let { 
             _currentSong.value = it
+            _showPlayerBar.value = true
             // Update current index to match the song from service
             val index = currentPlaylist.indexOfFirst { s -> s.id == it.id }
             if (index != -1) {

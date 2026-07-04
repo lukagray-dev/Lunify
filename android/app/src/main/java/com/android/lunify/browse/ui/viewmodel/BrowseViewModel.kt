@@ -1,335 +1,317 @@
 package com.android.lunify.browse.ui.viewmodel
 
 import android.app.Application
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.viewModelScope
-import com.android.lunify.browse.auth.YouTubeAuthManager
-import com.android.lunify.browse.auth.YouTubeAuthState
-import com.android.lunify.browse.data.model.StreamingPlatform
-import com.android.lunify.browse.data.model.YouTubeChannel
-import com.android.lunify.browse.data.model.YouTubeHomeContent
-import com.android.lunify.browse.data.model.YouTubePlaylist
-import com.android.lunify.browse.data.model.YouTubeSearchResult
-import com.android.lunify.browse.data.model.YouTubeVideo
-import com.android.lunify.browse.data.repository.YouTubeRepository
-import kotlinx.coroutines.flow.catch
+import com.android.lunify.download.data.model.ExtractedContent
+import com.android.lunify.download.engine.ytdlp.YtDlpAndroidEngine
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import org.json.JSONArray
+import java.io.InputStream
+import java.nio.charset.Charset
 
+/**
+ * Supported categories for online media discovery
+ */
+enum class BrowseCategory {
+    MUSIC, VIDEOS
+}
+
+/**
+ * Represents a section of tracks/videos in the home feed
+ */
+data class FeedSection(
+    val id: String,
+    val title: String,
+    val query: String,
+    val hero: Boolean,
+    val tracks: List<ExtractedContent>
+)
+
+/**
+ * ViewModel for the Browse feature.
+ * Coordinates category selection, lazy-loads feed sections with random queries,
+ * caches feeds in-memory for instant switching, and handles yt-dlp search.
+ */
 class BrowseViewModel(application: Application) : AndroidViewModel(application) {
 
-    private val repository = YouTubeRepository(application.applicationContext)
-    private val authManager = YouTubeAuthManager.getInstance(application.applicationContext)
+    companion object {
+        private const val TAG = "BrowseViewModel"
+    }
 
-    // Current platform - default to YOUTUBE
-    private val _currentPlatform = MutableLiveData(StreamingPlatform.YOUTUBE)
-    val currentPlatform: LiveData<StreamingPlatform> = _currentPlatform
+    private val context = application.applicationContext
+    private var ytDlpEngine: YtDlpAndroidEngine? = null
+
+    // Active category state
+    private val _currentCategory = MutableLiveData(BrowseCategory.MUSIC)
+    val currentCategory: LiveData<BrowseCategory> = _currentCategory
 
     // Loading states
     private val _isLoading = MutableLiveData(false)
     val isLoading: LiveData<Boolean> = _isLoading
 
-    // Home content
-    private val _homeContent = MutableLiveData<YouTubeHomeContent>()
-    val homeContent: LiveData<YouTubeHomeContent> = _homeContent
+    // Search query and results
+    private val _searchResults = MutableLiveData<List<ExtractedContent>>(emptyList())
+    val searchResults: LiveData<List<ExtractedContent>> = _searchResults
 
-    // Search
-    private val _searchResults = MutableLiveData<YouTubeSearchResult>()
-    val searchResults: LiveData<YouTubeSearchResult> = _searchResults
+    // Playback state of loading URL
+    private val _isResolvingStream = MutableLiveData<Boolean>(false)
+    val isResolvingStream: LiveData<Boolean> = _isResolvingStream
 
-    private val _searchQuery = MutableLiveData<String>()
-    val searchQuery: LiveData<String> = _searchQuery
+    // Home feeds cache
+    private val _musicHomeFeed = MutableLiveData<List<FeedSection>>(emptyList())
+    val musicHomeFeed: LiveData<List<FeedSection>> = _musicHomeFeed
 
-    private val _isSearchMode = MutableLiveData(false)
-    val isSearchMode: LiveData<Boolean> = _isSearchMode
+    private val _videoHomeFeed = MutableLiveData<List<FeedSection>>(emptyList())
+    val videoHomeFeed: LiveData<List<FeedSection>> = _videoHomeFeed
 
-    // Shorts
-    private val _shorts = MutableLiveData<List<YouTubeVideo>>()
-    val shorts: LiveData<List<YouTubeVideo>> = _shorts
+    private val _videoMoviesFeed = MutableLiveData<List<FeedSection>>(emptyList())
+    val videoMoviesFeed: LiveData<List<FeedSection>> = _videoMoviesFeed
 
-    // Subscriptions
-    private val _subscriptions = MutableLiveData<List<YouTubeChannel>>()
-    val subscriptions: LiveData<List<YouTubeChannel>> = _subscriptions
-
-    // Playlists
-    private val _playlists = MutableLiveData<List<YouTubePlaylist>>()
-    val playlists: LiveData<List<YouTubePlaylist>> = _playlists
-
-    // Current video for player
-    private val _currentVideo = MutableLiveData<YouTubeVideo?>()
-
-    // Related videos
-    private val _relatedVideos = MutableLiveData<List<YouTubeVideo>>()
-    val relatedVideos: LiveData<List<YouTubeVideo>> = _relatedVideos
-
-    // Channel videos
-    private val _channelVideos = MutableLiveData<List<YouTubeVideo>>()
-    val channelVideos: LiveData<List<YouTubeVideo>> = _channelVideos
-
-    // Channel shorts
-    private val _channelShorts = MutableLiveData<List<YouTubeVideo>>()
-    val channelShorts: LiveData<List<YouTubeVideo>> = _channelShorts
-
-    // Channel playlists
-    private val _channelPlaylists = MutableLiveData<List<YouTubePlaylist>>()
-    val channelPlaylists: LiveData<List<YouTubePlaylist>> = _channelPlaylists
-
-    // Playlist videos
-    private val _playlistVideos = MutableLiveData<List<YouTubeVideo>>()
-    val playlistVideos: LiveData<List<YouTubeVideo>> = _playlistVideos
-
-    // Error handling
-    private val _error = MutableLiveData<String?>()
-    val error: LiveData<String?> = _error
-
-    // Current tab
-    private val _currentTab = MutableLiveData(BrowseTab.HOME)
-    val currentTab: LiveData<BrowseTab> = _currentTab
-
-    // Auth state
-    private val _isAuthenticated = MutableLiveData(false)
-    val isAuthenticated: LiveData<Boolean> = _isAuthenticated
+    private val _videoTvShowsFeed = MutableLiveData<List<FeedSection>>(emptyList())
+    val videoTvShowsFeed: LiveData<List<FeedSection>> = _videoTvShowsFeed
 
     init {
-        // Observe auth state
-        viewModelScope.launch {
-            authManager.authState.collect { state ->
-                _isAuthenticated.value = state is YouTubeAuthState.Authenticated
+        // Initialize the yt-dlp engine on a background thread
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                Log.d(TAG, "Pre-initializing YtDlpAndroidEngine...")
+                val engine = YtDlpAndroidEngine(context)
+                val initResult = engine.initialize()
+                if (initResult.isSuccess) {
+                    ytDlpEngine = engine
+                    Log.d(TAG, "YtDlpAndroidEngine initialized successfully")
+                    // Load the default feed eagerly
+                    loadCategoryFeed(BrowseCategory.MUSIC, "home", forceRefresh = false)
+                } else {
+                    Log.e(TAG, "Failed to initialize YtDlpAndroidEngine: ${initResult.exceptionOrNull()?.message}")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error initializing yt-dlp engine", e)
             }
         }
     }
 
-    fun setPlatform(platform: StreamingPlatform) {
-        _currentPlatform.value = platform
+    /**
+     * Switch category (Music or Videos)
+     */
+    fun setCategory(category: BrowseCategory) {
+        if (_currentCategory.value == category) return
+        _currentCategory.value = category
+        // Reset search results when switching category
+        _searchResults.value = emptyList()
+        // Eagerly load the category home feed if not loaded
+        loadCategoryFeed(category, "home", forceRefresh = false)
     }
 
-    fun setCurrentTab(tab: BrowseTab) {
-        _currentTab.value = tab
-        _isSearchMode.value = false
-        when (tab) {
-            BrowseTab.HOME -> loadHomeContent()
-            BrowseTab.SHORTS -> loadShorts()
-            BrowseTab.SUBSCRIPTIONS -> loadSubscriptions()
-            BrowseTab.PLAYLISTS -> loadPlaylists()
-            BrowseTab.PROFILE -> { /* Load profile */ }
+    /**
+     * Load feed sections for a specific category and tab
+     */
+    fun loadCategoryFeed(category: BrowseCategory, tabId: String, forceRefresh: Boolean = false) {
+        val targetLiveData = when (category) {
+            BrowseCategory.MUSIC -> _musicHomeFeed
+            BrowseCategory.VIDEOS -> when (tabId) {
+                "home" -> _videoHomeFeed
+                "movies" -> _videoMoviesFeed
+                "tv_shows" -> _videoTvShowsFeed
+                else -> _videoHomeFeed
+            }
         }
-    }
 
-    fun loadHomeContent() {
-        viewModelScope.launch {
-            _isLoading.value = true
-            repository.getHomeContent()
-                .catch { e ->
-                    _error.value = e.message
-                    _isLoading.value = false
-                }
-                .collect { result ->
-                    result.onSuccess { content ->
-                        _homeContent.value = content
-                    }.onFailure { e ->
-                        _error.value = e.message
-                    }
-                    _isLoading.value = false
-                }
-        }
-    }
-
-    fun search(query: String) {
-        if (query.isBlank()) {
-            _searchResults.value = YouTubeSearchResult()
-            _isSearchMode.value = false
+        // Return from cache immediately if present and refresh not forced
+        if (!forceRefresh && !targetLiveData.value.isNullOrEmpty()) {
+            Log.d(TAG, "Returning cached feed sections for $category - $tabId")
             return
         }
-        _searchQuery.value = query
-        _isSearchMode.value = true
-        viewModelScope.launch {
-            _isLoading.value = true
-            repository.searchVideos(query)
-                .catch { e ->
-                    _error.value = e.message
-                    _isLoading.value = false
-                }
-                .collect { result ->
-                    result.onSuccess { searchResult ->
-                        _searchResults.value = searchResult
-                    }.onFailure { e ->
-                        _error.value = e.message
+
+        viewModelScope.launch(Dispatchers.IO) {
+            _isLoading.postValue(true)
+            try {
+                // Ensure engine is initialized
+                val engine = getOrInitEngine() ?: throw Exception("yt-dlp engine not available")
+
+                // Parse config list from assets
+                val filename = when (category) {
+                    BrowseCategory.MUSIC -> "browse/music_home.json"
+                    BrowseCategory.VIDEOS -> when (tabId) {
+                        "home" -> "browse/video_home.json"
+                        "movies" -> "browse/video_movies.json"
+                        "tv_shows" -> "browse/video_tvshows.json"
+                        else -> "browse/video_home.json"
                     }
-                    _isLoading.value = false
                 }
+
+                val jsonContent = loadJsonFromAssets(filename) ?: "[]"
+                val jsonArray = JSONArray(jsonContent)
+                val configs = mutableListOf<QueryConfig>()
+                for (i in 0 until jsonArray.length()) {
+                    val obj = jsonArray.getJSONObject(i)
+                    configs.add(
+                        QueryConfig(
+                            title = obj.getString("title"),
+                            query = obj.getString("query"),
+                            hero = obj.optBoolean("hero", false)
+                        )
+                    )
+                }
+
+                if (configs.isEmpty()) {
+                    targetLiveData.postValue(emptyList())
+                    return@launch
+                }
+
+                // Randomly select 6 sections to display (matching desktop strategy)
+                val shuffled = configs.shuffled()
+                val selectedConfigs = shuffled.take(minOf(6, shuffled.size))
+
+                val sections = mutableListOf<FeedSection>()
+                // Eagerly publish empty skeletons or placeholders to allow adapter updates
+                targetLiveData.postValue(emptyList())
+
+                // Load each section sequentially with a short delay (e.g. 500ms) to ensure responsiveness
+                for ((idx, cfg) in selectedConfigs.withIndex()) {
+                    try {
+                        Log.d(TAG, "Loading section [${cfg.title}] with query: ${cfg.query}")
+                        // Use flat-playlist searching
+                        val count = if (cfg.hero) 5 else 6
+                        val searchQuery = if (category == BrowseCategory.MUSIC) "${cfg.query} song" else cfg.query
+                        val searchPrefix = "ytsearch$count:$searchQuery"
+
+                        val result = engine.extractContent(searchPrefix)
+                        if (result.isSuccess) {
+                            val playlistContent = result.getOrNull()
+                            val tracks = playlistContent?.playlistItems ?: emptyList()
+                            if (tracks.isNotEmpty()) {
+                                sections.add(
+                                    FeedSection(
+                                        id = "${category.name.lowercase()}_sec_$idx",
+                                        title = cfg.title,
+                                        query = cfg.query,
+                                        hero = cfg.hero,
+                                        tracks = tracks
+                                    )
+                                )
+                                // Post partial updates to UI for progressive rendering
+                                targetLiveData.postValue(ArrayList(sections))
+                            }
+                        }
+                        // Short pause between yt-dlp invocations to be gentle on CPU and avoid network limits
+                        delay(600)
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Failed to load section: ${cfg.title}", e)
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to load category feed for $category - $tabId", e)
+            } finally {
+                _isLoading.postValue(false)
+            }
         }
     }
 
-    fun clearSearch() {
-        _searchQuery.value = ""
-        _searchResults.value = YouTubeSearchResult()
-        _isSearchMode.value = false
-    }
+    /**
+     * Search online content
+     */
+    fun performSearch(query: String) {
+        if (query.trim().isEmpty()) {
+            _searchResults.postValue(emptyList())
+            return
+        }
 
-    fun loadShorts() {
-        viewModelScope.launch {
-            _isLoading.value = true
-            repository.getShorts()
-                .catch { e ->
-                    _error.value = e.message
-                    _isLoading.value = false
+        viewModelScope.launch(Dispatchers.IO) {
+            _isLoading.postValue(true)
+            try {
+                val engine = getOrInitEngine() ?: throw Exception("yt-dlp engine not available")
+                
+                val count = 25
+                val category = _currentCategory.value ?: BrowseCategory.MUSIC
+                val searchQuery = if (category == BrowseCategory.MUSIC) "$query song" else query
+                val searchPrefix = "ytsearch$count:$searchQuery"
+
+                Log.d(TAG, "Searching: $searchPrefix")
+                val result = engine.extractContent(searchPrefix)
+                if (result.isSuccess) {
+                    val tracks = result.getOrNull()?.playlistItems ?: emptyList()
+                    _searchResults.postValue(tracks)
+                } else {
+                    Log.e(TAG, "Search failed: ${result.exceptionOrNull()?.message}")
+                    _searchResults.postValue(emptyList())
                 }
-                .collect { result ->
-                    result.onSuccess { shortsList ->
-                        _shorts.value = shortsList
-                    }.onFailure { e ->
-                        _error.value = e.message
-                    }
-                    _isLoading.value = false
-                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Search exception", e)
+                _searchResults.postValue(emptyList())
+            } finally {
+                _isLoading.postValue(false)
+            }
         }
     }
 
-    fun loadSubscriptions() {
-        viewModelScope.launch {
-            _isLoading.value = true
-            repository.getSubscriptions()
-                .catch { e ->
-                    _error.value = e.message
-                    _isLoading.value = false
-                }
-                .collect { result ->
-                    result.onSuccess { channels ->
-                        _subscriptions.value = channels
-                    }.onFailure { e ->
-                        _error.value = e.message
+    /**
+     * Resolves the streaming URLs for a track
+     */
+    fun resolveStreamingUrls(url: String, callback: (videoUrl: String, audioUrl: String?) -> Unit) {
+        viewModelScope.launch(Dispatchers.IO) {
+            _isResolvingStream.postValue(true)
+            try {
+                val engine = getOrInitEngine() ?: throw Exception("yt-dlp engine not available")
+                Log.d(TAG, "Resolving streaming URL for: $url")
+                val result = engine.getStreamingUrls(url)
+                if (result.isSuccess) {
+                    val streamingUrls = result.getOrNull()
+                    if (streamingUrls != null) {
+                        withContext(Dispatchers.Main) {
+                            callback(streamingUrls.videoUrl, streamingUrls.audioUrl)
+                        }
                     }
-                    _isLoading.value = false
+                } else {
+                    Log.e(TAG, "Failed to resolve stream URL: ${result.exceptionOrNull()?.message}")
                 }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error resolving streaming URL", e)
+            } finally {
+                _isResolvingStream.postValue(false)
+            }
         }
     }
 
-    fun loadPlaylists() {
-        viewModelScope.launch {
-            _isLoading.value = true
-            repository.getPlaylists()
-                .catch { e ->
-                    _error.value = e.message
-                    _isLoading.value = false
-                }
-                .collect { result ->
-                    result.onSuccess { playlistList ->
-                        _playlists.value = playlistList
-                    }.onFailure { e ->
-                        _error.value = e.message
-                    }
-                    _isLoading.value = false
-                }
+    private suspend fun getOrInitEngine(): YtDlpAndroidEngine? {
+        if (ytDlpEngine != null) return ytDlpEngine
+        
+        return try {
+            val engine = YtDlpAndroidEngine(context)
+            val result = engine.initialize()
+            if (result.isSuccess) {
+                ytDlpEngine = engine
+                engine
+            } else null
+        } catch (e: Exception) {
+            null
         }
     }
 
-    fun playVideo(video: YouTubeVideo) {
-        _currentVideo.value = video
-        loadRelatedVideos(video.id)
-    }
-
-    fun loadRelatedVideos(videoId: String) {
-        viewModelScope.launch {
-            repository.getRelatedVideos(videoId)
-                .catch { e ->
-                    _error.value = e.message
-                }
-                .collect { result ->
-                    result.onSuccess { videos ->
-                        _relatedVideos.value = videos
-                    }
-                }
+    private fun loadJsonFromAssets(path: String): String? {
+        return try {
+            val stream: InputStream = context.assets.open(path)
+            val size: Int = stream.available()
+            val buffer = ByteArray(size)
+            stream.read(buffer)
+            stream.close()
+            String(buffer, Charset.forName("UTF-8"))
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to load JSON asset: $path", e)
+            null
         }
     }
 
-    fun clearError() {
-        _error.value = null
-    }
-
-    // Channel methods
-    fun loadChannelDetails(channelId: String) = repository.getChannelDetails(channelId)
-
-    fun loadChannelVideos(channelId: String) {
-        viewModelScope.launch {
-            _isLoading.value = true
-            repository.getChannelVideos(channelId)
-                .catch { e ->
-                    _error.value = e.message
-                    _isLoading.value = false
-                }
-                .collect { result ->
-                    result.onSuccess { videos ->
-                        _channelVideos.value = videos
-                    }.onFailure { e ->
-                        _error.value = e.message
-                    }
-                    _isLoading.value = false
-                }
-        }
-    }
-
-    fun loadChannelShorts(channelId: String) {
-        viewModelScope.launch {
-            _isLoading.value = true
-            repository.getChannelShorts(channelId)
-                .catch { e ->
-                    _error.value = e.message
-                    _isLoading.value = false
-                }
-                .collect { result ->
-                    result.onSuccess { shorts ->
-                        _channelShorts.value = shorts
-                    }.onFailure { e ->
-                        _error.value = e.message
-                    }
-                    _isLoading.value = false
-                }
-        }
-    }
-
-    fun loadChannelPlaylists(channelId: String) {
-        viewModelScope.launch {
-            _isLoading.value = true
-            repository.getChannelPlaylists(channelId)
-                .catch { e ->
-                    _error.value = e.message
-                    _isLoading.value = false
-                }
-                .collect { result ->
-                    result.onSuccess { playlists ->
-                        _channelPlaylists.value = playlists
-                    }.onFailure { e ->
-                        _error.value = e.message
-                    }
-                    _isLoading.value = false
-                }
-        }
-    }
-
-    fun loadPlaylistVideos(playlistId: String) {
-        viewModelScope.launch {
-            _isLoading.value = true
-            repository.getPlaylistVideos(playlistId)
-                .catch { e ->
-                    _error.value = e.message
-                    _isLoading.value = false
-                }
-                .collect { result ->
-                    result.onSuccess { videos ->
-                        _playlistVideos.value = videos
-                    }.onFailure { e ->
-                        _error.value = e.message
-                    }
-                    _isLoading.value = false
-                }
-        }
-    }
-
-    // Auth methods
-    fun getAuthManager(): YouTubeAuthManager = authManager
-
-    enum class BrowseTab {
-        HOME, SHORTS, SUBSCRIPTIONS, PLAYLISTS, PROFILE
-    }
+    private data class QueryConfig(
+        val title: String,
+        val query: String,
+        val hero: Boolean
+    )
 }

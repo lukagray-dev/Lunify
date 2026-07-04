@@ -57,8 +57,7 @@
             android:layout_marginStart="12dp"
             android:text="Sign in with Google"
             android:textColor="#1F1F1F"
-            android:textSize="14sp"
-            android:fontFamily="sans-serif-medium"/>
+            android:textSize="14sp"/>
 
     </LinearLayout>
 
