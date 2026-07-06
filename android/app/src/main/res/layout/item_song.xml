@@ -4,10 +4,9 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
-    android:layout_height="wrap_content"
+    android:layout_height="@dimen/song_item_height"
     android:background="?attr/selectableItemBackground"
-    android:paddingHorizontal="@dimen/spacing_lg"
-    android:paddingVertical="@dimen/spacing_md">
+    android:paddingHorizontal="@dimen/spacing_lg">
 
     <!-- Song Thumbnail -->
     <androidx.cardview.widget.CardView
@@ -90,10 +89,9 @@
         android:id="@+id/divider"
         android:layout_width="0dp"
         android:layout_height="@dimen/divider_height"
-        android:layout_marginTop="@dimen/spacing_md"
         android:background="@color/dividerColor"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"/>
+        app:layout_constraintStart_toStartOf="@id/songInfo"/>
 
 </androidx.constraintlayout.widget.ConstraintLayout>

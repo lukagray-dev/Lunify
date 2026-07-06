@@ -77,27 +77,29 @@
         android:orientation="vertical"
         android:visibility="gone">
 
-        <!-- Top Bar -->
+        <!-- Top Bar with Duo Header and Search.
+             Padded and aligned identically to activity_main.xml and fragment_browse.xml
+             to create a completely cohesive and symmetrical top bar structure. -->
         <LinearLayout
             android:id="@+id/topBar"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:gravity="center_vertical"
             android:orientation="horizontal"
-            android:paddingHorizontal="16dp"
-            android:paddingVertical="12dp"
-            android:elevation="4dp">
+            android:paddingHorizontal="@dimen/spacing_md"
+            android:paddingVertical="@dimen/spacing_sm">
 
-            <!-- Duo Icon and Title (clickable to open connection sheet) -->
+            <!-- Duo Icon and Title (clickable to open connection sheet)
+                 Height is set to 48dp to match the menu button and platform selector heights
+                 on other screens for uniform vertical spacing. -->
             <FrameLayout
                 android:id="@+id/duoHeaderClickable"
                 android:layout_width="wrap_content"
-                android:layout_height="56dp"
+                android:layout_height="48dp"
                 android:minWidth="100dp"
                 android:background="?attr/selectableItemBackground"
                 android:clickable="true"
-                android:focusable="true"
-                android:elevation="2dp">
+                android:focusable="true">
                 
                 <LinearLayout
                     android:layout_width="wrap_content"
@@ -148,44 +150,61 @@
                 android:id="@+id/ivSignalStrength"
                 android:layout_width="24dp"
                 android:layout_height="24dp"
-                android:layout_marginStart="8dp"
+                android:layout_marginStart="@dimen/spacing_sm"
                 android:src="@drawable/ic_signal_wifi_4"
                 android:contentDescription="@string/duo_signal_strength"
                 app:tint="@color/textPrimary" />
 
-            <!-- Search Bar (wider) -->
-            <EditText
-                android:id="@+id/etSearch"
+            <!-- Search Bar Container - Structured as a wrapped LinearLayout with standard 44dp height
+                 to look and behave exactly the same as the search bars in My Music and Browse pages. -->
+            <LinearLayout
+                android:id="@+id/searchBarContainer"
                 android:layout_width="0dp"
-                android:layout_height="40dp"
+                android:layout_height="@dimen/search_bar_height"
+                android:layout_marginStart="@dimen/spacing_sm"
                 android:layout_weight="1"
-                android:layout_marginStart="16dp"
                 android:background="@drawable/bg_search_bar"
-                android:drawableStart="@drawable/ic_search"
-                android:drawablePadding="8dp"
-                android:hint="@string/search_hint"
-                android:imeOptions="actionSearch"
-                android:inputType="text"
-                android:maxLines="1"
-                android:paddingHorizontal="12dp"
-                android:textColor="@color/textPrimary"
-                android:textColorHint="@color/textSecondary"
-                android:textSize="14sp" />
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingHorizontal="@dimen/spacing_md">
+
+                <ImageView
+                    android:layout_width="@dimen/icon_size_md"
+                    android:layout_height="@dimen/icon_size_md"
+                    android:src="@drawable/ic_search"
+                    android:contentDescription="Search"/>
+
+                <!-- Search EditText - Styled using SearchEditTextStyle for uniform text, hint colors,
+                     and size parameters across the application. -->
+                <EditText
+                    android:id="@+id/etSearch"
+                    style="@style/SearchEditTextStyle"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_marginStart="@dimen/spacing_sm"
+                    android:layout_weight="1"
+                    android:hint="@string/search_hint"
+                    android:imeOptions="actionSearch"
+                    android:importantForAutofill="no"/>
+
+            </LinearLayout>
 
         </LinearLayout>
 
-        <!-- Tab Layout (dark mode optimized) -->
+        <!-- Tab Layout - Height is standard 48dp (@dimen/tab_height) and configured with transparent background,
+             aligned start, and the default TabTextAppearance style to match Browse and My Music pages. -->
         <com.google.android.material.tabs.TabLayout
             android:id="@+id/tabLayout"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:background="@color/backgroundColor"
-            app:tabGravity="fill"
+            android:layout_height="@dimen/tab_height"
+            android:background="@color/transparent"
+            app:tabGravity="start"
             app:tabIndicatorColor="@color/tabIndicator"
+            app:tabIndicatorFullWidth="false"
             app:tabMode="scrollable"
             app:tabSelectedTextColor="@color/tabSelectedText"
             app:tabTextColor="@color/tabUnselectedText"
-            app:tabTextAppearance="@style/DuoTabTextAppearance" />
+            app:tabTextAppearance="@style/TabTextAppearance" />
 
         <!-- SwipeRefreshLayout wrapping ViewPager -->
         <androidx.swiperefreshlayout.widget.SwipeRefreshLayout

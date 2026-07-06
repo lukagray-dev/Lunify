@@ -3,7 +3,10 @@ package com.android.lunify.videoplayer.ui
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
+import android.view.MotionEvent
 import android.view.ScaleGestureDetector
 import android.view.View
 import android.view.WindowManager
@@ -21,6 +24,7 @@ import androidx.media3.exoplayer.source.MergingMediaSource
 import androidx.media3.ui.AspectRatioFrameLayout
 import com.android.lunify.R
 import com.android.lunify.databinding.ActivityVideoPlayerBinding
+import com.android.lunify.player.service.MusicService
 import com.android.lunify.videoplayer.preview.PreviewManager
 
 /**
@@ -36,6 +40,7 @@ class VideoPlayerActivity : AppCompatActivity() {
     
     companion object {
         private const val TAG = "VideoPlayerActivity"
+        private const val CONTROLS_AUTO_HIDE_DELAY_MS = 5000L
         private const val EXTRA_VIDEO_URL = "extra_video_url"
         private const val EXTRA_AUDIO_URL = "extra_audio_url"
         private const val EXTRA_VIDEO_TITLE = "extra_video_title"
@@ -51,6 +56,11 @@ class VideoPlayerActivity : AppCompatActivity() {
             title: String = "",
             startPositionMs: Long = 0L
         ) {
+            context.startService(Intent(context, MusicService::class.java).apply {
+                action = MusicService.ACTION_STOP
+            })
+            LocalVideoPlayerActivity.stopPlayback()
+
             val intent = Intent(context, VideoPlayerActivity::class.java).apply {
                 putExtra(EXTRA_VIDEO_URL, videoUrl)
                 putExtra(EXTRA_AUDIO_URL, audioUrl)
@@ -65,11 +75,15 @@ class VideoPlayerActivity : AppCompatActivity() {
     
     private lateinit var binding: ActivityVideoPlayerBinding
     private var exoPlayer: ExoPlayer? = null
+    private val controlsHandler = Handler(Looper.getMainLooper())
+    private val hideControlsRunnable = Runnable { hideControls() }
     
     private var videoUrl: String = ""
     private var audioUrl: String? = null
     private var videoTitle: String = ""
     private var startPositionMs: Long = 0L
+    private var controlsVisible = true
+    private var pendingSeekPositionMs: Long = 0L
     
     // Pinch-to-zoom support
     private lateinit var scaleGestureDetector: ScaleGestureDetector
@@ -101,10 +115,23 @@ class VideoPlayerActivity : AppCompatActivity() {
         setupUI()
         enableImmersiveMode()
         initializePlayer()
+        showControls()
     }
     
     private fun setupUI() {
         binding.tvTitle.text = videoTitle
+        binding.playerView.controllerShowTimeoutMs = CONTROLS_AUTO_HIDE_DELAY_MS.toInt()
+        binding.playerView.setControllerVisibilityListener(
+            object : androidx.media3.ui.PlayerView.ControllerVisibilityListener {
+                override fun onVisibilityChanged(visibility: Int) {
+                    if (visibility == View.VISIBLE) {
+                        showControls()
+                    } else {
+                        hideControls()
+                    }
+                }
+            }
+        )
         
         binding.btnClose.setOnClickListener {
             savePositionAndFinish()
@@ -207,6 +234,10 @@ class VideoPlayerActivity : AppCompatActivity() {
                         }
                         Player.STATE_READY -> {
                             binding.progressLoading.visibility = View.GONE
+                            if (pendingSeekPositionMs > 0L) {
+                                exoPlayer?.seekTo(pendingSeekPositionMs)
+                                pendingSeekPositionMs = 0L
+                            }
                             // Auto-play when ready
                             exoPlayer?.play()
                         }
@@ -230,6 +261,7 @@ class VideoPlayerActivity : AppCompatActivity() {
             
             // Load media
             loadMedia()
+            showControls()
             
         } catch (e: Exception) {
             Log.e(TAG, "Failed to initialize player: ${e.message}")
@@ -265,12 +297,7 @@ class VideoPlayerActivity : AppCompatActivity() {
             }
             
             player.prepare()
-            
-            // Seek to saved position if any
-            if (startPositionMs > 0) {
-                Log.d(TAG, "Seeking to saved position: ${startPositionMs}ms")
-                player.seekTo(startPositionMs)
-            }
+            pendingSeekPositionMs = startPositionMs.coerceAtLeast(0L)
             
         } catch (e: Exception) {
             Log.e(TAG, "Failed to load media: ${e.message}")
@@ -285,6 +312,37 @@ class VideoPlayerActivity : AppCompatActivity() {
         val controller = WindowInsetsControllerCompat(window, binding.root)
         controller.hide(WindowInsetsCompat.Type.systemBars())
         controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+    }
+
+    private fun showControls() {
+        controlsVisible = true
+        binding.topBar.animate().cancel()
+        binding.topBar.visibility = View.VISIBLE
+        binding.topBar.alpha = 1f
+        controlsHandler.removeCallbacks(hideControlsRunnable)
+        controlsHandler.postDelayed(hideControlsRunnable, CONTROLS_AUTO_HIDE_DELAY_MS)
+    }
+
+    private fun hideControls() {
+        if (!controlsVisible || isFinishing || isDestroyed) return
+        controlsVisible = false
+        binding.topBar.animate().cancel()
+        binding.topBar.animate()
+            .alpha(0f)
+            .setDuration(200L)
+            .withEndAction {
+                if (!controlsVisible) {
+                    binding.topBar.visibility = View.GONE
+                }
+            }
+            .start()
+    }
+
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        if (ev.actionMasked == MotionEvent.ACTION_DOWN) {
+            showControls()
+        }
+        return super.dispatchTouchEvent(ev)
     }
     
     private fun toggleOrientation() {
@@ -321,6 +379,11 @@ class VideoPlayerActivity : AppCompatActivity() {
         super.onPause()
         exoPlayer?.pause()
     }
+
+    override fun onResume() {
+        super.onResume()
+        showControls()
+    }
     
     override fun onStop() {
         super.onStop()
@@ -336,6 +399,7 @@ class VideoPlayerActivity : AppCompatActivity() {
     override fun onDestroy() {
         super.onDestroy()
         releasePlayer()
+        controlsHandler.removeCallbacks(hideControlsRunnable)
         window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
     }
     

@@ -5,51 +5,53 @@
     android:layout_height="match_parent"
     android:background="@color/backgroundColor">
 
-    <!-- Top Bar without dropdown -->
+    <!-- Top Bar without dropdown.
+         Padded and aligned identically to activity_main.xml, fragment_browse.xml, and fragment_duo.xml
+         to establish perfect horizontal and vertical symmetry. -->
     <LinearLayout
         android:id="@+id/topBar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:gravity="center_vertical"
         android:orientation="horizontal"
-        android:paddingHorizontal="16dp"
-        android:paddingVertical="12dp">
+        android:paddingHorizontal="@dimen/spacing_md"
+        android:paddingVertical="@dimen/spacing_sm">
 
-        <!-- Downloads Title (no dropdown icon) -->
+        <!-- Downloads Title - Configured with 48dp height to match the action buttons and headers
+             on other screens for uniform vertical layout flow. -->
         <TextView
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
+            android:layout_width="wrap_content"
+            android:layout_height="48dp"
+            android:gravity="center_vertical"
             android:text="@string/downloads"
             android:textColor="@color/textPrimary"
             android:textSize="16sp"
             android:textStyle="bold" />
 
-        <!-- Link Input Bar -->
+        <!-- Link Input Bar - Structured with standard 44dp height to look identical to the search
+             bars in other app screens. -->
         <LinearLayout
             android:id="@+id/linkInputContainer"
             android:layout_width="0dp"
-            android:layout_height="40dp"
-            android:layout_marginStart="0dp"
-            android:layout_weight="3"
+            android:layout_height="@dimen/search_bar_height"
+            android:layout_marginStart="@dimen/spacing_sm"
+            android:layout_weight="1"
             android:background="@drawable/bg_search_bar"
             android:gravity="center_vertical"
             android:orientation="horizontal"
-            android:paddingHorizontal="10dp">
+            android:paddingHorizontal="@dimen/spacing_md">
 
+            <!-- Link EditText - Styled with SearchEditTextStyle for visual consistency
+                 while retaining specific URL input and action properties. -->
             <EditText
                 android:id="@+id/etLinkInput"
+                style="@style/SearchEditTextStyle"
                 android:layout_width="0dp"
                 android:layout_height="match_parent"
                 android:layout_weight="1"
-                android:background="@android:color/transparent"
                 android:hint="Paste video or playlist link"
                 android:imeOptions="actionDone"
                 android:inputType="textUri"
-                android:maxLines="1"
-                android:textColor="@color/textPrimary"
-                android:textColorHint="@color/textHint"
-                android:textSize="14sp"
                 android:importantForAutofill="no" />
 
             <ImageButton
@@ -67,11 +69,11 @@
 
     </LinearLayout>
 
-    <!-- Downloads Fragment Container -->
+    <!-- Downloads Fragment Container - Margin top adjusted to 64dp to sit cleanly below the 64dp high top bar. -->
     <FrameLayout
         android:id="@+id/downloadsFragmentContainer"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:layout_marginTop="56dp" />
+        android:layout_marginTop="64dp" />
 
 </FrameLayout>

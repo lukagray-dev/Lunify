@@ -14,29 +14,33 @@
         android:layout_height="match_parent">
 
         <!-- Top Bar with Platform Selector and Search -->
+        <!-- Top Bar with Platform Selector and Search.
+             Positioned and padded identically to the top bar in activity_main.xml
+             to ensure seamless horizontal and vertical symmetry. -->
         <LinearLayout
             android:id="@+id/topBar"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:gravity="center_vertical"
             android:orientation="horizontal"
-            android:paddingHorizontal="12dp"
-            android:paddingVertical="8dp"
+            android:paddingHorizontal="@dimen/spacing_md"
+            android:paddingVertical="@dimen/spacing_sm"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="parent">
 
-            <!-- Platform Selector -->
+            <!-- Platform Selector - Set to a fixed 48dp height to match the menu button
+                 in activity_main.xml for height symmetry. -->
             <LinearLayout
                 android:id="@+id/platformSelector"
                 android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
+                android:layout_height="48dp"
                 android:background="@drawable/ripple_circle"
                 android:clickable="true"
                 android:focusable="true"
                 android:gravity="center_vertical"
                 android:orientation="horizontal"
-                android:padding="8dp">
+                android:paddingHorizontal="8dp">
 
                 <ImageView
                     android:id="@+id/ivPlatformIcon"
@@ -45,6 +49,8 @@
                     android:src="@drawable/ic_youtube"
                     android:contentDescription="Platform"/>
 
+                <!-- Heading Text - Vertical gravity and disabled font padding ensure it aligns
+                     perfectly with the icons on either side. -->
                 <TextView
                     android:id="@+id/tvPlatformName"
                     android:layout_width="wrap_content"
@@ -53,7 +59,9 @@
                     android:text="YouTube"
                     android:textColor="@color/textPrimary"
                     android:textSize="16sp"
-                    android:textStyle="bold"/>
+                    android:textStyle="bold"
+                    android:gravity="center_vertical"
+                    android:includeFontPadding="false"/>
 
                 <ImageView
                     android:layout_width="20dp"
@@ -64,49 +72,48 @@
 
             </LinearLayout>
 
-            <!-- Search Bar (for YouTube/Spotify) -->
+            <!-- Search Bar Container - Height matches the 44dp standard to be symmetrical
+                 across My Music, Browse, and Duo pages. -->
             <LinearLayout
                 android:id="@+id/searchBarContainer"
                 android:layout_width="0dp"
-                android:layout_height="40dp"
-                android:layout_marginStart="8dp"
+                android:layout_height="@dimen/search_bar_height"
+                android:layout_marginStart="@dimen/spacing_sm"
                 android:layout_weight="1"
                 android:background="@drawable/bg_search_bar"
                 android:gravity="center_vertical"
                 android:orientation="horizontal"
-                android:paddingHorizontal="12dp">
+                android:paddingHorizontal="@dimen/spacing_md">
 
                 <ImageView
-                    android:layout_width="20dp"
-                    android:layout_height="20dp"
+                    android:layout_width="@dimen/icon_size_md"
+                    android:layout_height="@dimen/icon_size_md"
                     android:src="@drawable/ic_search"
                     android:contentDescription="Search"/>
 
+                <!-- Search EditText using standard SearchEditTextStyle to ensure exact
+                     visual consistency across all search inputs in the application. -->
                 <EditText
                     android:id="@+id/etSearch"
+                    style="@style/SearchEditTextStyle"
                     android:layout_width="0dp"
                     android:layout_height="match_parent"
-                    android:layout_marginStart="8dp"
+                    android:layout_marginStart="@dimen/spacing_sm"
                     android:layout_weight="1"
-                    android:background="@android:color/transparent"
                     android:hint="Search for songs and artists"
                     android:imeOptions="actionSearch"
-                    android:inputType="text"
-                    android:maxLines="1"
-                    android:textColor="@color/textPrimary"
-                    android:textColorHint="@color/textHint"
-                    android:textSize="14sp"
                     android:importantForAutofill="no"/>
 
             </LinearLayout>
 
         </LinearLayout>
 
-        <!-- Tab Layout -->
+        <!-- Tab Layout - Configured to 48dp height to match the tab layouts in
+             My Music and Duo pages, achieving perfect vertical alignment. -->
         <com.google.android.material.tabs.TabLayout
             android:id="@+id/tabLayout"
             android:layout_width="match_parent"
-            android:layout_height="44dp"
+            android:layout_height="@dimen/tab_height"
             android:background="@color/transparent"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"

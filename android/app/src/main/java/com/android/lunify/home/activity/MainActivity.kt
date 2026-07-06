@@ -27,9 +27,11 @@ import com.android.lunify.R
 import com.android.lunify.auth.AuthManager
 import com.android.lunify.auth.GoogleSignInErrorMapper
 import com.android.lunify.data.model.Song
+import com.android.lunify.data.model.Video
 import com.android.lunify.data.repository.MusicRepository
 import com.android.lunify.databinding.ActivityMainBinding
 import com.android.lunify.databinding.LayoutPlayerBarBinding
+import com.android.lunify.databinding.LayoutVideoPlayerBarBinding
 import com.android.lunify.home.fragment.DuoFragment
 import com.android.lunify.home.fragment.DownloadsTabFragment
 import com.android.lunify.home.fragment.ProfileFragment
@@ -44,20 +46,33 @@ import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.common.api.ApiException
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import kotlinx.coroutines.launch
-
 import com.android.lunify.duo.ui.viewmodel.DuoViewModel
 import com.google.android.material.tabs.TabLayoutMediator
+import androidx.viewpager2.widget.ViewPager2
+import com.android.lunify.videoplayer.ui.LocalVideoPlayerActivity
 
 class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
     private lateinit var playerBarBinding: LayoutPlayerBarBinding
+    private var videoPlayerBarBinding: LayoutVideoPlayerBarBinding? = null
     private val homeViewModel: HomeViewModel by viewModels()
     private val playerViewModel: PlayerViewModel by viewModels()
     private val authViewModel: AuthViewModel by viewModels()
     private val duoViewModel: DuoViewModel by viewModels()
     private lateinit var authManager: AuthManager
     private lateinit var tabPagerAdapter: TabPagerAdapter
+    private var currentVideoTitle: String? = null
+    private var currentVideoPositionMs: Long = 0L
+    private var currentVideoDurationMs: Long = 0L
+    private var currentVideoPlaying: Boolean = false
+    private val videoTabIndex = 1
+    private val videoPageChangeCallback = object : ViewPager2.OnPageChangeCallback() {
+        override fun onPageSelected(position: Int) {
+            super.onPageSelected(position)
+            syncVideoPlayerBarVisibility()
+        }
+    }
     
     // ContentObserver to detect new media files
     private val mediaObserver = object : ContentObserver(Handler(Looper.getMainLooper())) {
@@ -193,6 +208,7 @@ class MainActivity : AppCompatActivity() {
         setupTabs()
         setupBottomNavigation()
         setupPlayerBar()
+        setupVideoPlayerBar()
         setupSearch()
         observeViewModel()
         observeAuthState()
@@ -247,6 +263,20 @@ class MainActivity : AppCompatActivity() {
             handleDrawerItemClick("Privacy Policy")
         }
     }
+    
+    private val videoStateReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            when (intent?.action) {
+                LocalVideoPlayerActivity.BROADCAST_VIDEO_STATE -> {
+                    currentVideoPlaying = intent.getBooleanExtra(LocalVideoPlayerActivity.EXTRA_IS_PLAYING, false)
+                    currentVideoTitle = intent.getStringExtra(LocalVideoPlayerActivity.EXTRA_VIDEO_TITLE)
+                    currentVideoPositionMs = intent.getLongExtra(LocalVideoPlayerActivity.EXTRA_POSITION, 0L)
+                    currentVideoDurationMs = intent.getLongExtra(LocalVideoPlayerActivity.EXTRA_DURATION, 0L)
+                    renderVideoPlayerBar()
+                }
+            }
+        }
+    }
 
     private fun openDownloads() {
         binding.drawerLayout.closeDrawer(GravityCompat.START)
@@ -288,6 +318,8 @@ class MainActivity : AppCompatActivity() {
         TabLayoutMediator(binding.tabLayout, binding.viewPager) { tab, position ->
             tab.text = tabPagerAdapter.getTabTitle(position)
         }.attach()
+
+        binding.viewPager.registerOnPageChangeCallback(videoPageChangeCallback)
     }
 
     private fun setupBottomNavigation() {
@@ -329,6 +361,7 @@ class MainActivity : AppCompatActivity() {
         binding.duoContainer.visibility = View.GONE
         binding.downloadsTabContainer.visibility = View.GONE
         binding.profileContainer.visibility = View.GONE
+        syncVideoPlayerBarVisibility()
     }
 
     private fun showDuoTab() {
@@ -346,6 +379,7 @@ class MainActivity : AppCompatActivity() {
                 .replace(R.id.duoContainer, DuoFragment.newInstance())
                 .commit()
         }
+        syncVideoPlayerBarVisibility()
     }
 
     private fun showDownloadsTab() {
@@ -363,6 +397,7 @@ class MainActivity : AppCompatActivity() {
                 .replace(R.id.downloadsTabContainer, DownloadsTabFragment.newInstance())
                 .commit()
         }
+        syncVideoPlayerBarVisibility()
     }
 
     private fun showBrowseTab() {
@@ -380,6 +415,7 @@ class MainActivity : AppCompatActivity() {
                 .replace(R.id.browseContainer, com.android.lunify.browse.fragment.BrowseFragment.newInstance())
                 .commit()
         }
+        syncVideoPlayerBarVisibility()
     }
 
     private fun showProfileTab() {
@@ -397,6 +433,7 @@ class MainActivity : AppCompatActivity() {
                 .replace(R.id.profileContainer, ProfileFragment.newInstance())
                 .commit()
         }
+        syncVideoPlayerBarVisibility()
     }
 
     private fun loadDuoIconFromAssets() {
@@ -516,6 +553,92 @@ class MainActivity : AppCompatActivity() {
             startService(Intent(this, MusicService::class.java).apply { 
                 action = MusicService.ACTION_PREVIOUS 
             })
+        }
+    }
+
+    private fun setupVideoPlayerBar() {
+        videoPlayerBarBinding = LayoutVideoPlayerBarBinding.inflate(layoutInflater)
+        binding.videoPlayerBarContainer.addView(videoPlayerBarBinding?.root)
+
+        videoPlayerBarBinding?.apply {
+            root.setOnClickListener {
+                LocalVideoPlayerActivity.getCurrentVideo()?.let { video ->
+                    val playlist = LocalVideoPlayerActivity.getCurrentVideoList()
+                    LocalVideoPlayerActivity.start(
+                        this@MainActivity,
+                        video,
+                        playlist.ifEmpty { listOf(video) }
+                    )
+                }
+            }
+
+            btnPlayPause.setOnClickListener {
+                LocalVideoPlayerActivity.togglePlayPause()
+                renderVideoPlayerBar()
+            }
+
+            btnClose.setOnClickListener {
+                LocalVideoPlayerActivity.stopPlayback()
+                binding.videoPlayerBarContainer.visibility = View.GONE
+            }
+        }
+
+        binding.videoPlayerBarContainer.visibility = View.GONE
+        renderVideoPlayerBar()
+    }
+
+    private fun syncVideoPlayerBarVisibility() {
+        renderVideoPlayerBar()
+    }
+
+    private fun renderVideoPlayerBar() {
+        val video = LocalVideoPlayerActivity.getCurrentVideo()
+        val isMusicTabVisible = binding.viewPager.visibility == View.VISIBLE
+        val shouldShow = video != null && (!isMusicTabVisible || binding.viewPager.currentItem != videoTabIndex)
+
+        if (!shouldShow || video == null) {
+            binding.videoPlayerBarContainer.visibility = View.GONE
+            return
+        }
+
+        val isPlaying = currentVideoPlaying || LocalVideoPlayerActivity.isPlaying()
+        binding.videoPlayerBarContainer.visibility = View.VISIBLE
+        videoPlayerBarBinding?.apply {
+            tvVideoTitle.text = currentVideoTitle ?: video.title
+
+            if (currentVideoDurationMs > 0L) {
+                val durationValue = currentVideoDurationMs.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+                val progressValue = currentVideoPositionMs.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+                tvVideoDuration.text = "${formatDuration(currentVideoPositionMs)} / ${formatDuration(currentVideoDurationMs)}"
+                progressBar.max = durationValue
+                progressBar.progress = progressValue
+            } else {
+                tvVideoDuration.text = video.formattedDuration
+                progressBar.max = 100
+                progressBar.progress = 0
+            }
+
+            btnPlayPause.setImageResource(
+                if (isPlaying) R.drawable.ic_pause else R.drawable.ic_play
+            )
+
+            Glide.with(this@MainActivity)
+                .load(video.thumbnailUri)
+                .placeholder(R.drawable.ic_video)
+                .centerCrop()
+                .into(ivVideoThumbnail)
+        }
+    }
+
+    private fun formatDuration(ms: Long): String {
+        val seconds = (ms / 1000) % 60
+        val minutes = (ms / 1000 / 60) % 60
+        val hours = ms / 1000 / 3600
+
+        return if (hours > 0) {
+            String.format("%d:%02d:%02d", hours, minutes, seconds)
+        } else {
+            String.format("%d:%02d", minutes, seconds)
         }
     }
 
@@ -825,6 +948,11 @@ class MainActivity : AppCompatActivity() {
             addAction(MusicService.BROADCAST_SONG_CHANGE)
         }
         LocalBroadcastManager.getInstance(this).registerReceiver(playbackReceiver, filter)
+
+        val videoFilter = IntentFilter().apply {
+            addAction(LocalVideoPlayerActivity.BROADCAST_VIDEO_STATE)
+        }
+        LocalBroadcastManager.getInstance(this).registerReceiver(videoStateReceiver, videoFilter)
         
         // Register Duo sync receiver for broadcasts from DuoSongsListActivity
         val duoSyncFilter = IntentFilter().apply {
@@ -838,7 +966,9 @@ class MainActivity : AppCompatActivity() {
     override fun onDestroy() {
         super.onDestroy()
         LocalBroadcastManager.getInstance(this).unregisterReceiver(playbackReceiver)
+        LocalBroadcastManager.getInstance(this).unregisterReceiver(videoStateReceiver)
         LocalBroadcastManager.getInstance(this).unregisterReceiver(duoSyncReceiver)
+        binding.viewPager.unregisterOnPageChangeCallback(videoPageChangeCallback)
         contentResolver.unregisterContentObserver(mediaObserver)
     }
 
@@ -846,6 +976,7 @@ class MainActivity : AppCompatActivity() {
         super.onResume()
         // Refresh media list when returning to app
         homeViewModel.loadAllMedia()
+        renderVideoPlayerBar()
     }
 
     @Deprecated("Deprecated in Java")

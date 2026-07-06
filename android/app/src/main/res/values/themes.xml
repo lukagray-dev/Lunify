@@ -63,7 +63,8 @@
         <item name="android:textColor">@color/textSecondary</item>
     </style>
 
-    <!-- Search EditText Style -->
+    <!-- Search EditText Style - Ensures that search input text is centered vertically
+         and aligns perfectly with the search icons next to it. -->
     <style name="SearchEditTextStyle">
         <item name="android:background">@android:color/transparent</item>
         <item name="android:textColor">@color/textPrimary</item>
@@ -71,6 +72,7 @@
         <item name="android:textSize">@dimen/text_size_md</item>
         <item name="android:maxLines">1</item>
         <item name="android:inputType">text</item>
+        <item name="android:gravity">center_vertical</item>
     </style>
 
     <!-- Drawer Item Style -->

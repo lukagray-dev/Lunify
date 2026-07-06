@@ -24,6 +24,7 @@ import com.android.lunify.player.PlayCountManager
 import com.android.lunify.data.model.Song
 import com.android.lunify.equalizer.manager.EqualizerManager
 import com.android.lunify.home.activity.MainActivity
+import com.android.lunify.videoplayer.ui.LocalVideoPlayerActivity
 
 class MusicService : Service() {
 
@@ -164,6 +165,8 @@ class MusicService : Service() {
 
 
     fun playSong(song: Song) {
+        stopLocalVideoPlayback()
+
         currentSong = song
         currentIndex = playlist.indexOfFirst { it.id == song.id }
         if (currentIndex == -1 && playlist.isEmpty()) {
@@ -212,6 +215,8 @@ class MusicService : Service() {
     }
 
     private fun playNextInternal() {
+        stopLocalVideoPlayback()
+
         // First check if there are songs in the queue
         if (queue.isNotEmpty()) {
             val nextSong = queue.removeAt(0)
@@ -236,6 +241,8 @@ class MusicService : Service() {
     }
 
     private fun playPreviousInternal() {
+        stopLocalVideoPlayback()
+
         val currentPosition = mediaPlayer?.currentPosition ?: 0
         
         // If played more than 3 seconds, restart current song
@@ -279,6 +286,8 @@ class MusicService : Service() {
     }
 
     fun resumeSong() {
+        stopLocalVideoPlayback()
+
         mediaPlayer?.start()
         currentSong?.let { 
             updatePlaybackState(PlaybackStateCompat.STATE_PLAYING)
@@ -520,6 +529,14 @@ class MusicService : Service() {
         mediaPlayer?.release()
         mediaPlayer = null
         mediaSession?.release()
+    }
+
+    private fun stopLocalVideoPlayback() {
+        runCatching {
+            LocalVideoPlayerActivity.stopPlayback()
+        }.onFailure { error ->
+            android.util.Log.w("MusicService", "Failed to stop local video playback: ${error.message}")
+        }
     }
 
     companion object {
