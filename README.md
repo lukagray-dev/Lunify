@@ -49,7 +49,11 @@ Download music, videos, and entire playlists from YouTube and 1000+ other DRM-fr
 
 ## Getting Started
 
-> *Lunify is currently in active development. Compiled binaries will be available soon.* 🫷
+Pre-release binaries are available for testing. You can download the latest signed APK directly from the [GitHub Releases](https://github.com/lukagray-dev/Lunify/releases) page:
+
+1. Navigate to the [Releases](https://github.com/lukagray-dev/Lunify/releases) section.
+2. Download the `lunify-v0.1.0-alpha.1.apk` asset.
+3. Open and install the APK on your Android device (ensure installation from unknown sources is allowed in your device settings).
 
 ## Supported Sources
 
