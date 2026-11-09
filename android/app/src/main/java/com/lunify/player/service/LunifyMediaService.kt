@@ -4,19 +4,23 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import androidx.annotation.OptIn
+import androidx.core.content.ContextCompat
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.CommandButton
 import androidx.media3.session.DefaultMediaNotificationProvider
+import androidx.media3.session.MediaController
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import androidx.media3.session.SessionCommand
+import androidx.media3.session.SessionToken
 import com.lunify.LunifyApplication
 import com.lunify.MainActivity
 import com.lunify.R
@@ -117,6 +121,30 @@ class LunifyMediaService : MediaSessionService() {
                 updateMediaButtonPreferences(state)
             }
         }
+
+        // 7. Establish internal controller connection to immediately activate MediaNotificationManager
+        val sessionToken = SessionToken(this, ComponentName(this, LunifyMediaService::class.java))
+        val controllerFuture = MediaController.Builder(this, sessionToken).buildAsync()
+        controllerFuture.addListener({
+            try {
+                controllerFuture.get()
+                Log.d(TAG, "Internal MediaController successfully connected")
+            } catch (e: Exception) {
+                Log.w(TAG, "Internal MediaController connection failed: ${e.message}")
+            }
+        }, ContextCompat.getMainExecutor(this))
+    }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        Log.d(TAG, "LunifyMediaService onStartCommand action=${intent?.action}")
+        return super.onStartCommand(intent, flags, startId)
+    }
+
+    override fun onUpdateNotification(
+        session: MediaSession,
+        startInForegroundRequired: Boolean,
+    ) {
+        super.onUpdateNotification(session, startInForegroundRequired)
     }
 
     /**
@@ -191,7 +219,6 @@ class LunifyMediaService : MediaSessionService() {
         Log.d(TAG, "LunifyMediaService onDestroy")
         serviceScope.cancel()
         mediaSession?.run {
-            player.release()
             release()
             mediaSession = null
         }

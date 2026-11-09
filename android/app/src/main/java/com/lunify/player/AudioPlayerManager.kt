@@ -14,6 +14,7 @@ import androidx.media3.common.MediaMetadata
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.datasource.cache.CacheDataSource
 import androidx.media3.exoplayer.ExoPlayer
@@ -106,10 +107,13 @@ class AudioPlayerManager(
         .setReadTimeoutMs(20000)
         .setAllowCrossProtocolRedirects(true)
 
+    // Universal data source handling file://, content://, rawresource://, asset://, and HTTP
+    private val defaultDataSourceFactory = DefaultDataSource.Factory(context, httpDataSourceFactory)
+
     // Cached data source factory using our singleton SimpleCache
     private val cacheDataSourceFactory = CacheDataSource.Factory()
         .setCache(PlayerCacheManager.getInstance(context))
-        .setUpstreamDataSourceFactory(httpDataSourceFactory)
+        .setUpstreamDataSourceFactory(defaultDataSourceFactory)
         .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
 
     private val mediaSourceFactory = DefaultMediaSourceFactory(context)
@@ -329,15 +333,22 @@ class AudioPlayerManager(
     }
 
     /**
-     * Ensures our [LunifyMediaService] foreground service is alive, hosting
+     * Ensures our [LunifyMediaService] service is running, hosting
      * the active MediaSession and system media notification shade.
+     * Uses startService() first when the app is in the foreground, falling back
+     * to startForegroundService() only when required by background restrictions.
      */
     fun ensureServiceStarted() {
         try {
             val intent = Intent(context, LunifyMediaService::class.java)
-            ContextCompat.startForegroundService(context, intent)
+            context.startService(intent)
         } catch (e: Exception) {
-            Log.w(TAG, "Could not start LunifyMediaService: ${e.message}")
+            try {
+                val intent = Intent(context, LunifyMediaService::class.java)
+                ContextCompat.startForegroundService(context, intent)
+            } catch (e2: Exception) {
+                Log.w(TAG, "Could not start LunifyMediaService: ${e2.message}")
+            }
         }
     }
 
