@@ -33,6 +33,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.runtime.LaunchedEffect
+import com.lunify.data.repository.OnlineMusicRepository
 import com.lunify.domain.model.Album
 import com.lunify.domain.model.Artist
 import com.lunify.domain.model.PlayerState
@@ -79,27 +81,48 @@ fun HomeScreen(
     onOpenSettings: () -> Unit,
     onOpenDuo: () -> Unit,
     onOpenTrackOptions: (Track) -> Unit = {},
+    onlineRepository: OnlineMusicRepository = remember { OnlineMusicRepository() },
     modifier: Modifier = Modifier,
 ) {
     var selectedMoodId by remember { mutableStateOf("all") }
 
-    // Mock Sample Data for Immediate UI Review
-    val sampleQuickPicks = remember {
+    // Fallback Mock Sample Data
+    val defaultQuickPicks = remember {
         listOf(
+            Track("I94fhjQ-U30", "Tum Se Hi", "Pritam, Mohit Chauhan", "Jab We Met", "5:23", 323000L),
+            Track("xTvyyoF_LZY", "Shape of You", "Ed Sheeran", "÷ (Divide)", "3:54", 234000L),
+            Track("O3-6zB3kg8M", "Brown Rang", "Yo Yo Honey Singh", "International Villager", "2:59", 179000L),
             Track("t1", "Midnight City", "M83", "Hurry Up, We're Dreaming", "4:04", 244000L),
-            Track("t2", "Starboy", "The Weeknd ft. Daft Punk", "Starboy", "3:50", 230000L),
-            Track("t3", "Instant Crush", "Daft Punk ft. Julian Casablancas", "Random Access Memories", "5:37", 337000L),
-            Track("t4", "Resonance", "HOME", "Odyssey", "3:32", 212000L),
         )
     }
 
-    val sampleTrending = remember {
+    val defaultTrending = remember {
         listOf(
             Album("a1", "After Hours", "The Weeknd", "2020", "", 14),
             Album("a2", "Random Access Memories", "Daft Punk", "2013", "", 13),
             Album("a3", "Currents", "Tame Impala", "2015", "", 13),
             Album("a4", "Hurry Up, We're Dreaming", "M83", "2011", "", 22),
         )
+    }
+
+    var quickPicks by remember { mutableStateOf<List<Track>>(defaultQuickPicks) }
+    var trendingAlbums by remember { mutableStateOf<List<Album>>(defaultTrending) }
+
+    // Fetch live YouTube Music home feed data in background
+    LaunchedEffect(Unit) {
+        val qpResult = onlineRepository.getHomeQuickPicks()
+        qpResult.getOrNull()?.let { livePicks ->
+            if (livePicks.isNotEmpty()) {
+                quickPicks = livePicks
+            }
+        }
+
+        val trendingResult = onlineRepository.getHomeTrending()
+        trendingResult.getOrNull()?.let { liveAlbums ->
+            if (liveAlbums.isNotEmpty()) {
+                trendingAlbums = liveAlbums
+            }
+        }
     }
 
     val samplePlaylists = remember {
@@ -236,7 +259,7 @@ fun HomeScreen(
             // 3. Quick Picks 4-Song Group
             item {
                 QuickPicksSection(
-                    tracks = sampleQuickPicks,
+                    tracks = quickPicks,
                     activeTrackId = playerState.currentTrack?.id,
                     isPlaying = playerState.isPlaying,
                     onTrackClick = onTrackSelect,
@@ -269,10 +292,11 @@ fun HomeScreen(
                         contentPadding = PaddingValues(horizontal = 20.dp),
                         horizontalArrangement = Arrangement.spacedBy(14.dp),
                     ) {
-                        items(sampleTrending) { album ->
+                        items(trendingAlbums) { album ->
                             MediaCard(
                                 title = album.title,
                                 subtitle = album.artist,
+                                thumbnailUrl = album.thumbnailUrl,
                                 cardWidth = 145.dp,
                                 onClick = { onAlbumSelect(album) },
                             )

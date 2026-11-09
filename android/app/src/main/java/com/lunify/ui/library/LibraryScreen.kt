@@ -1415,8 +1415,13 @@ fun shareTrack(context: Context, track: Track) {
         val shareIntent = Intent(Intent.ACTION_SEND).apply {
             type = "text/plain"
             putExtra(Intent.EXTRA_SUBJECT, track.title)
-            putExtra(Intent.EXTRA_TEXT, "Listening to \"${track.title}\" by ${track.artist} on Lunify!")
-            if (track.contentUri.isNotBlank()) {
+            val shareText = if (!track.isDownloaded && !track.id.startsWith("content://") && !track.id.startsWith("file://")) {
+                "Listening to \"${track.title}\" by ${track.artist} on Lunify!\nhttps://music.youtube.com/watch?v=${track.id}"
+            } else {
+                "Listening to \"${track.title}\" by ${track.artist} on Lunify!"
+            }
+            putExtra(Intent.EXTRA_TEXT, shareText)
+            if (track.isDownloaded && track.contentUri.isNotBlank()) {
                 val uri = Uri.parse(track.contentUri)
                 putExtra(Intent.EXTRA_STREAM, uri)
                 type = "audio/*"

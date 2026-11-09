@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -26,6 +27,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.layout.ContentScale
+import coil.compose.AsyncImage
 import com.lunify.domain.model.Track
 import com.lunify.ui.theme.AccentCyan
 import com.lunify.ui.theme.GlassSurfaceDark
@@ -86,12 +89,23 @@ fun TrackRowItem(
                 ),
             contentAlignment = Alignment.Center,
         ) {
-            LucideIcon(
-                iconRes = if (track.isVideo) LucideIcons.Video else LucideIcons.Music,
-                contentDescription = null,
-                size = 22.dp,
-                tint = if (isActive) Color.White else TextPrimary.copy(alpha = 0.85f),
-            )
+            if (track.thumbnailUrl.isNotBlank()) {
+                AsyncImage(
+                    model = track.thumbnailUrl,
+                    contentDescription = track.title,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clip(RoundedCornerShape(10.dp)),
+                    contentScale = ContentScale.Crop,
+                )
+            } else {
+                LucideIcon(
+                    iconRes = if (track.isVideo) LucideIcons.Video else LucideIcons.Music,
+                    contentDescription = null,
+                    size = 22.dp,
+                    tint = if (isActive) Color.White else TextPrimary.copy(alpha = 0.85f),
+                )
+            }
 
             // Active Playing Soundwave Overlay
             if (isActive && isPlaying) {

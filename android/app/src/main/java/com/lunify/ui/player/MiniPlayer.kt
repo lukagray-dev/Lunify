@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
@@ -42,6 +43,8 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlin.math.roundToInt
+import androidx.compose.ui.layout.ContentScale
+import coil.compose.AsyncImage
 import com.lunify.domain.model.PlayerState
 import com.lunify.ui.components.LucideIcon
 import com.lunify.ui.components.LucideIconButton
@@ -153,12 +156,23 @@ fun MiniPlayer(
                         .background(GlassSurfaceDark),
                     contentAlignment = Alignment.Center,
                 ) {
-                    LucideIcon(
-                        iconRes = if (track.isVideo) LucideIcons.Video else LucideIcons.Music,
-                        contentDescription = null,
-                        size = 20.dp,
-                        tint = Color.White,
-                    )
+                    if (track.thumbnailUrl.isNotBlank()) {
+                        AsyncImage(
+                            model = track.thumbnailUrl,
+                            contentDescription = track.title,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .clip(RoundedCornerShape(10.dp)),
+                            contentScale = ContentScale.Crop,
+                        )
+                    } else {
+                        LucideIcon(
+                            iconRes = if (track.isVideo) LucideIcons.Video else LucideIcons.Music,
+                            contentDescription = null,
+                            size = 20.dp,
+                            tint = Color.White,
+                        )
+                    }
                 }
 
                 Spacer(modifier = Modifier.width(12.dp))

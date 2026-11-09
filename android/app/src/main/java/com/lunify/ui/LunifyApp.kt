@@ -19,6 +19,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -32,6 +33,7 @@ import androidx.compose.ui.platform.LocalContext
 import com.lunify.data.local.LibraryStorage
 import com.lunify.data.repository.LocalAudioRepository
 import com.lunify.data.repository.LyricsRepository
+import com.lunify.data.repository.OnlineLyricsRepository
 import com.lunify.domain.model.LyricLine
 import com.lunify.domain.model.SyncedLyrics
 import com.lunify.domain.model.Track
@@ -95,10 +97,25 @@ fun LunifyApp(
     // Reactive single source of truth for playback state
     val playerState by audioPlayerManager.playerState.collectAsState()
 
-    // Real lyrics lookup from companion .lrc or embedded tags (null if track has no lyrics)
-    val currentLyrics = remember(playerState.currentTrack) {
-        playerState.currentTrack?.let { track ->
-            LyricsRepository.getLyricsForTrack(track, context)
+    val onlineLyricsRepo = remember { OnlineLyricsRepository() }
+
+    // Real lyrics lookup: companion .lrc file first, followed by LRCLIB online synchronized lyrics
+    val currentLyrics by produceState<SyncedLyrics?>(initialValue = null, playerState.currentTrack) {
+        val track = playerState.currentTrack
+        if (track != null) {
+            val localLyrics = LyricsRepository.getLyricsForTrack(track, context)
+            if (localLyrics != null) {
+                value = localLyrics
+            } else {
+                value = onlineLyricsRepo.fetchLyrics(
+                    trackId = track.id,
+                    title = track.title,
+                    artist = track.artist,
+                    durationSeconds = (track.durationMs / 1000).toInt(),
+                )
+            }
+        } else {
+            value = null
         }
     }
 
@@ -366,7 +383,15 @@ fun LunifyApp(
                                 Toast.makeText(context, "Could not delete track", Toast.LENGTH_SHORT).show()
                             }
                         } else {
-                            Toast.makeText(context, "Downloaded \"${track.title}\"", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, "Downloading \"${track.title}\"...", Toast.LENGTH_SHORT).show()
+                            audioPlayerManager.downloadTrack(track) { success ->
+                                if (success) {
+                                    Toast.makeText(context, "Downloaded \"${track.title}\"", Toast.LENGTH_SHORT).show()
+                                    libraryRefreshTrigger++
+                                } else {
+                                    Toast.makeText(context, "Download failed for \"${track.title}\"", Toast.LENGTH_SHORT).show()
+                                }
+                            }
                         }
                     },
                     onAddToPlaylist = {

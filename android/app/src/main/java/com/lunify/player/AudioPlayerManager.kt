@@ -2,14 +2,22 @@ package com.lunify.player
 
 import android.content.Context
 import android.net.Uri
+import android.os.Environment
+import android.util.Log
+import androidx.annotation.OptIn
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem as ExoMediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.datasource.cache.CacheDataSource
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import com.lunify.data.local.LibraryStorage
+import com.lunify.data.repository.OnlineMusicRepository
 import com.lunify.domain.model.PlaybackProgress
 import com.lunify.domain.model.PlaybackSource
 import com.lunify.domain.model.PlayerState
@@ -28,6 +36,11 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import java.io.File
+import java.io.FileOutputStream
 
 /**
  * ==============================================================================
@@ -40,32 +53,42 @@ import kotlinx.coroutines.launch
  * ------------------------
  * This manager is the single source of truth for audio playback throughout the
  * entire application. It wraps Google's production-grade `androidx.media3.exoplayer`,
- * configuring it strictly for lightweight, highly reliable audio-only playback
- * (music, podcasts, local tracks).
+ * configuring it strictly for lightweight, highly reliable audio playback
+ * across both offline local tracks and online YouTube Music streaming.
  *
  * KEY FEATURES IMPLEMENTED HERE:
  * 1. ExoPlayer Lifecycle & Audio Focus: Configured with `AUDIO_CONTENT_TYPE_MUSIC`
  *    and automatic audio focus handling (so if a phone call comes in, music pauses!).
- * 2. Real-Time State Streaming: Exposes a reactive `StateFlow<PlayerState>` that
- *    both the MiniPlayer and FullscreenPlayer observe simultaneously.
- * 3. Smart Transport Controls:
+ * 2. Media3 Caching: Backed by [PlayerCacheManager]'s [SimpleCache] and
+ *    [CacheDataSource.Factory] so online streams are buffered to disk with LRU
+ *    eviction, enabling instant replay and zero repeat bandwidth usage.
+ * 3. Dynamic Stream Resolution: For online tracks, resolves high-bitrate audio URLs
+ *    using [OnlineMusicRepository] and seamlessly begins playback.
+ * 4. Infinite Radio Auto-Queue: When playing an online song with a short queue,
+ *    automatically queries YouTube Music for related songs and appends them.
+ * 5. Smart Transport Controls:
  *    - Play / Pause / Seek.
  *    - Next track: advances queue or loops based on repeat mode.
- *    - **Previous Button Logic**:
- *      - If song has played for > 3 seconds (3000ms), restart from the beginning (0ms).
+ *    - Previous track logic:
+ *      - If song has played for > 3 seconds (> 3000ms), restart from the beginning (0ms).
  *      - If song has played <= 3 seconds, jump to the previous song in queue.
- * 4. Automatic History Recording: Whenever a track begins playback, it is logged
- *    to persistent `LibraryStorage` tagged as OFFLINE or ONLINE.
- * 5. Persistent Favorites Sync: Toggling like/heart reflects across all player surfaces
- *    and the library screen immediately.
+ * 6. Offline Downloading: Allows downloading any online track to device storage,
+ *    registering it into [LibraryStorage] for offline listening.
  * ==============================================================================
  */
+@OptIn(UnstableApi::class)
 class AudioPlayerManager(
     private val context: Context,
     val libraryStorage: LibraryStorage,
+    private val onlineRepository: OnlineMusicRepository = OnlineMusicRepository(),
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var progressTickerJob: Job? = null
+    private var streamResolutionJob: Job? = null
+
+    companion object {
+        private const val TAG = "AudioPlayerManager"
+    }
 
     // Configure ExoPlayer purely for audio playback with audio focus and noisy-intent handling
     private val audioAttributes = AudioAttributes.Builder()
@@ -73,10 +96,27 @@ class AudioPlayerManager(
         .setUsage(C.USAGE_MEDIA)
         .build()
 
+    // Upstream HTTP data source with standard browser headers and timeouts
+    private val httpDataSourceFactory = DefaultHttpDataSource.Factory()
+        .setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36")
+        .setConnectTimeoutMs(15000)
+        .setReadTimeoutMs(20000)
+        .setAllowCrossProtocolRedirects(true)
+
+    // Cached data source factory using our singleton SimpleCache
+    private val cacheDataSourceFactory = CacheDataSource.Factory()
+        .setCache(PlayerCacheManager.getInstance(context))
+        .setUpstreamDataSourceFactory(httpDataSourceFactory)
+        .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
+
+    private val mediaSourceFactory = DefaultMediaSourceFactory(context)
+        .setDataSourceFactory(cacheDataSourceFactory)
+
     val exoPlayer: ExoPlayer = ExoPlayer.Builder(context)
         .setAudioAttributes(audioAttributes, /* handleAudioFocus = */ true)
         .setHandleAudioBecomingNoisy(true)
         .setWakeMode(C.WAKE_MODE_LOCAL)
+        .setMediaSourceFactory(mediaSourceFactory)
         .build()
 
     // Internal mutable state flow driving the UI
@@ -122,7 +162,7 @@ class AudioPlayerManager(
             }
 
             override fun onPlayerError(error: PlaybackException) {
-                error.printStackTrace()
+                Log.e(TAG, "ExoPlayer playback error: ${error.message}", error)
                 _playerState.update { it.copy(status = PlayerStatus.ERROR) }
                 stopProgressTicker()
             }
@@ -166,7 +206,7 @@ class AudioPlayerManager(
                     currentPositionMs = currentMs,
                     totalDurationMs = durationMs,
                     bufferedPositionMs = bufferedMs,
-                )
+                ),
             )
         }
     }
@@ -177,6 +217,10 @@ class AudioPlayerManager(
 
     /**
      * Plays a specific track, optionally replacing the current active playlist queue.
+     *
+     * Handles both:
+     * 1. Offline local audio tracks (via contentUri or file:// URI).
+     * 2. Online streaming tracks (dynamically resolves stream URL via PipePipe extractor).
      *
      * @param track The song to play.
      * @param newQueue Optional list of tracks forming the active queue/playlist.
@@ -197,40 +241,145 @@ class AudioPlayerManager(
             )
         }
 
-        // Build Media3 MediaItem with rich metadata
-        val mediaUri = if (track.contentUri.isNotBlank()) {
-            Uri.parse(track.contentUri)
-        } else if (track.id.startsWith("content://") || track.id.startsWith("http")) {
-            Uri.parse(track.id)
+        // Cancel any pending stream resolution from previous track taps
+        streamResolutionJob?.cancel()
+
+        // Check if track is a local file or already has a direct HTTP stream URL
+        if (track.isDownloaded && track.contentUri.isNotBlank()) {
+            playDirectUri(Uri.parse(track.contentUri), trackWithFavorite)
+        } else if (track.contentUri.startsWith("http://") || track.contentUri.startsWith("https://")) {
+            playDirectUri(Uri.parse(track.contentUri), trackWithFavorite)
+        } else if (track.id.startsWith("content://") || track.id.startsWith("file://")) {
+            playDirectUri(Uri.parse(track.id), trackWithFavorite)
         } else {
-            null
-        }
+            // Online YouTube Music track: resolve audio stream URL asynchronously
+            streamResolutionJob = scope.launch(Dispatchers.IO) {
+                Log.d(TAG, "Resolving online audio stream for: ${track.title} (${track.id})")
+                val streamResult = onlineRepository.getAudioStreamUrl(track.id)
 
-        if (mediaUri != null) {
-            val metadata = MediaMetadata.Builder()
-                .setTitle(track.title)
-                .setArtist(track.artist)
-                .setAlbumTitle(track.album)
-                .build()
+                withContext(Dispatchers.Main) {
+                    streamResult.onSuccess { streamUrl ->
+                        Log.d(TAG, "Stream resolved successfully for ${track.id}")
+                        val resolvedTrack = trackWithFavorite.copy(contentUri = streamUrl)
+                        playDirectUri(Uri.parse(streamUrl), resolvedTrack)
 
-            val exoItem = ExoMediaItem.Builder()
-                .setMediaId(track.id)
-                .setUri(mediaUri)
-                .setMediaMetadata(metadata)
-                .build()
-
-            exoPlayer.setMediaItem(exoItem)
-            exoPlayer.prepare()
-            exoPlayer.play()
-        } else {
-            // For mock/demo items without real URI, simulate ready playback
-            _playerState.update { it.copy(status = PlayerStatus.PLAYING) }
-            startProgressTicker()
+                        // Trigger background queue expansion if the current queue is small
+                        maybeExpandQueue(track.id)
+                    }.onFailure { err ->
+                        Log.e(TAG, "Failed to resolve stream for ${track.id}: ${err.message}", err)
+                        _playerState.update { it.copy(status = PlayerStatus.ERROR) }
+                    }
+                }
+            }
         }
 
         // Record into persistent history
         val source = if (track.isDownloaded) PlaybackSource.OFFLINE else PlaybackSource.ONLINE
         libraryStorage.addToHistory(trackWithFavorite, source)
+    }
+
+    /**
+     * Prepares and starts ExoPlayer playback with a direct media URI and metadata.
+     */
+    private fun playDirectUri(mediaUri: Uri, track: Track) {
+        val metadata = MediaMetadata.Builder()
+            .setTitle(track.title)
+            .setArtist(track.artist)
+            .setAlbumTitle(track.album)
+            .build()
+
+        val exoItem = ExoMediaItem.Builder()
+            .setMediaId(track.id)
+            .setUri(mediaUri)
+            .setMediaMetadata(metadata)
+            .build()
+
+        exoPlayer.setMediaItem(exoItem)
+        exoPlayer.prepare()
+        exoPlayer.play()
+    }
+
+    /**
+     * If the queue is running low (<= 2 tracks), fetches related radio tracks from YouTube
+     * and seamlessly appends them to the queue for uninterrupted music listening.
+     */
+    private fun maybeExpandQueue(videoId: String) {
+        if (_playerState.value.queue.size <= 2) {
+            scope.launch(Dispatchers.IO) {
+                val relatedResult = onlineRepository.getRelatedQueue(videoId)
+                val relatedTracks = relatedResult.getOrNull()
+                if (!relatedTracks.isNullOrEmpty()) {
+                    withContext(Dispatchers.Main) {
+                        _playerState.update { state ->
+                            val existingIds = state.queue.map { it.id }.toSet()
+                            val newTracks = relatedTracks.filter { it.id !in existingIds }
+                            state.copy(queue = state.queue + newTracks)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Downloads an online track to the device for offline playback.
+     * Writes audio bytes to the app's external music directory and updates [LibraryStorage].
+     */
+    fun downloadTrack(track: Track, onComplete: ((Boolean) -> Unit)? = null) {
+        scope.launch(Dispatchers.IO) {
+            try {
+                // 1. Resolve direct audio stream URL if not already present
+                val streamUrl = if (track.contentUri.startsWith("http")) {
+                    track.contentUri
+                } else {
+                    onlineRepository.getAudioStreamUrl(track.id).getOrThrow()
+                }
+
+                // 2. Prepare destination file in device Music directory
+                val musicDir = context.getExternalFilesDir(Environment.DIRECTORY_MUSIC) ?: context.filesDir
+                val safeFileName = "${track.title.replace(Regex("[^a-zA-Z0-9.-]"), "_")}_${track.id}.m4a"
+                val destinationFile = File(musicDir, safeFileName)
+
+                // 3. Download audio stream using OkHttpClient
+                val request = Request.Builder().url(streamUrl).build()
+                val okHttpClient = OkHttpClient()
+                val response = okHttpClient.newCall(request).execute()
+
+                if (!response.isSuccessful) {
+                    response.close()
+                    withContext(Dispatchers.Main) { onComplete?.invoke(false) }
+                    return@launch
+                }
+
+                response.body?.byteStream()?.use { input ->
+                    FileOutputStream(destinationFile).use { output ->
+                        input.copyTo(output)
+                    }
+                }
+
+                // 4. Update track metadata as downloaded
+                val downloadedTrack = track.copy(
+                    isDownloaded = true,
+                    filePath = destinationFile.absolutePath,
+                    contentUri = Uri.fromFile(destinationFile).toString(),
+                    sizeBytes = destinationFile.length(),
+                )
+
+                // 5. Save track in local library storage
+                libraryStorage.recordPlay(downloadedTrack.id)
+
+                withContext(Dispatchers.Main) {
+                    // If current track was the one downloaded, update state
+                    if (_playerState.value.currentTrack?.id == track.id) {
+                        _playerState.update { it.copy(currentTrack = downloadedTrack) }
+                    }
+                    onComplete?.invoke(true)
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Download failed for track '${track.title}': ${e.message}", e)
+                withContext(Dispatchers.Main) { onComplete?.invoke(false) }
+            }
+        }
     }
 
     /**
@@ -371,7 +520,7 @@ class AudioPlayerManager(
         if (_playerState.value.currentTrack?.id == track.id) {
             _playerState.update { state ->
                 state.copy(
-                    currentTrack = state.currentTrack?.copy(isFavorite = isNowFavorite)
+                    currentTrack = state.currentTrack?.copy(isFavorite = isNowFavorite),
                 )
             }
         }
@@ -384,7 +533,7 @@ class AudioPlayerManager(
         _playerState.update {
             it.copy(
                 queue = newQueue,
-                currentIndex = activeIndex.coerceIn(0, (newQueue.size - 1).coerceAtLeast(0))
+                currentIndex = activeIndex.coerceIn(0, (newQueue.size - 1).coerceAtLeast(0)),
             )
         }
     }
@@ -394,6 +543,7 @@ class AudioPlayerManager(
      */
     fun release() {
         stopProgressTicker()
+        streamResolutionJob?.cancel()
         scope.cancel()
         exoPlayer.release()
     }

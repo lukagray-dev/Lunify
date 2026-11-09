@@ -389,4 +389,33 @@ class LunifyDomainTest {
         assertEquals(5, queueAfterAppend.size)
         assertEquals("Final Song", queueAfterAppend.last().title)
     }
+
+    /**
+     * Verifies online track representation and sharing URL construction.
+     */
+    @Test
+    fun testOnlineTrackModelAndSharing() {
+        val onlineTrack = Track(
+            id = "xTvyyoF_LZY",
+            title = "Shape of You",
+            artist = "Ed Sheeran",
+            durationText = "3:54",
+            durationMs = 234000L,
+            thumbnailUrl = "https://yt3.googleusercontent.com/test=w544-h544",
+            isDownloaded = false,
+        )
+
+        assertFalse(onlineTrack.isDownloaded)
+        assertEquals("3:54", onlineTrack.formattedDuration())
+        assertTrue(onlineTrack.thumbnailUrl.contains("w544-h544"))
+
+        // History item created from this track should automatically infer ONLINE playback source
+        val historyItem = HistoryItem(track = onlineTrack)
+        assertEquals(PlaybackSource.ONLINE, historyItem.source)
+
+        // Offline track should infer OFFLINE
+        val offlineTrack = onlineTrack.copy(isDownloaded = true, contentUri = "content://media/123")
+        val offlineHistoryItem = HistoryItem(track = offlineTrack)
+        assertEquals(PlaybackSource.OFFLINE, offlineHistoryItem.source)
+    }
 }

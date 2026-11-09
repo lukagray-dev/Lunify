@@ -40,6 +40,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.layout.ContentScale
+import coil.compose.AsyncImage
 import com.lunify.domain.model.PlayerState
 import com.lunify.domain.model.RepeatMode
 import com.lunify.domain.model.SyncedLyrics
@@ -193,25 +195,36 @@ fun FullscreenPlayer(
                             ),
                         contentAlignment = Alignment.Center,
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .background(
-                                    brush = Brush.verticalGradient(
-                                        colors = listOf(
-                                            ObsidianSurfaceHigh,
-                                            GlassSurfaceElevated,
+                        if (track.thumbnailUrl.isNotBlank()) {
+                            AsyncImage(
+                                model = track.thumbnailUrl,
+                                contentDescription = track.title,
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .clip(RoundedCornerShape(24.dp)),
+                                contentScale = ContentScale.Crop,
+                            )
+                        } else {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .background(
+                                        brush = Brush.verticalGradient(
+                                            colors = listOf(
+                                                ObsidianSurfaceHigh,
+                                                GlassSurfaceElevated,
+                                            ),
                                         ),
                                     ),
-                                ),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            LucideIcon(
-                                iconRes = if (track.isVideo) LucideIcons.Video else LucideIcons.Music,
-                                contentDescription = null,
-                                size = 80.dp,
-                                tint = Color.White.copy(alpha = 0.7f),
-                            )
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                LucideIcon(
+                                    iconRes = if (track.isVideo) LucideIcons.Video else LucideIcons.Music,
+                                    contentDescription = null,
+                                    size = 80.dp,
+                                    tint = Color.White.copy(alpha = 0.7f),
+                                )
+                            }
                         }
                     }
                 }

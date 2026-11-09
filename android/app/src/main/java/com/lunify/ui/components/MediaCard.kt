@@ -30,6 +30,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.layout.ContentScale
+import coil.compose.AsyncImage
 import com.lunify.ui.theme.AccentCyan
 import com.lunify.ui.theme.GlassBorderSubtle
 import com.lunify.ui.theme.GlassSurfaceDark
@@ -90,26 +92,37 @@ fun MediaCard(
                 ),
             contentAlignment = Alignment.Center,
         ) {
-            // Background Artwork Placeholder / Fallback
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(
-                        brush = Brush.verticalGradient(
-                            colors = listOf(
-                                ObsidianSurfaceHigh,
-                                GlassSurfaceDark,
+            // Background Artwork (Coil Remote Image with Gradient Fallback)
+            if (thumbnailUrl.isNotBlank()) {
+                AsyncImage(
+                    model = thumbnailUrl,
+                    contentDescription = title,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clip(RoundedCornerShape(16.dp)),
+                    contentScale = ContentScale.Crop,
+                )
+            } else {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(
+                            brush = Brush.verticalGradient(
+                                colors = listOf(
+                                    ObsidianSurfaceHigh,
+                                    GlassSurfaceDark,
+                                ),
                             ),
                         ),
-                    ),
-                contentAlignment = Alignment.Center,
-            ) {
-                LucideIcon(
-                    iconRes = LucideIcons.Music,
-                    contentDescription = null,
-                    size = 40.dp,
-                    tint = Color.White.copy(alpha = 0.8f),
-                )
+                    contentAlignment = Alignment.Center,
+                ) {
+                    LucideIcon(
+                        iconRes = LucideIcons.Music,
+                        contentDescription = null,
+                        size = 40.dp,
+                        tint = Color.White.copy(alpha = 0.8f),
+                    )
+                }
             }
 
             // Quick Play Badge Button (Lower-right corner)
