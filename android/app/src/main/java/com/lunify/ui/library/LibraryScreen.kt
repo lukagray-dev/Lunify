@@ -167,7 +167,7 @@ fun LibraryScreen(
         hasAudioPermission = isGranted
         if (isGranted) {
             isLoadingTracks = true
-            localTracks = localAudioRepository.getLocalAudioTracks()
+            localTracks = localAudioRepository.getLocalAudioTracks(libraryStorage)
             isLoadingTracks = false
         }
     }
@@ -175,7 +175,7 @@ fun LibraryScreen(
     LaunchedEffect(hasAudioPermission, refreshTrigger) {
         if (hasAudioPermission) {
             isLoadingTracks = true
-            localTracks = localAudioRepository.getLocalAudioTracks()
+            localTracks = localAudioRepository.getLocalAudioTracks(libraryStorage)
             customPlaylists = libraryStorage.getCustomPlaylists()
             isLoadingTracks = false
         }

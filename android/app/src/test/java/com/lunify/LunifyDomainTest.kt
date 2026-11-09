@@ -418,4 +418,36 @@ class LunifyDomainTest {
         val offlineHistoryItem = HistoryItem(track = offlineTrack)
         assertEquals(PlaybackSource.OFFLINE, offlineHistoryItem.source)
     }
+
+    @Test
+    fun testDownloadedTrackPropertiesAndSanitization() {
+        val rawTitle = "Song / With * Special ? Characters"
+        val videoId = "kOn-HdEg6AQ"
+        val safeTitle = rawTitle.replace(Regex("[^a-zA-Z0-9.-]"), "_").take(50)
+        val safeFileName = "${safeTitle}_${videoId}.m4a"
+
+        assertFalse(safeFileName.contains("/"))
+        assertFalse(safeFileName.contains("*"))
+        assertFalse(safeFileName.contains("?"))
+        assertTrue(safeFileName.endsWith(".m4a"))
+        assertTrue(safeFileName.contains(videoId))
+
+        val downloadedTrack = Track(
+            id = videoId,
+            title = rawTitle,
+            artist = "Artist Name",
+            album = "Album Name",
+            durationMs = 210000L,
+            isDownloaded = true,
+            folderName = "Lunify",
+            filePath = "/storage/emulated/0/Music/Lunify/$safeFileName",
+            contentUri = "file:///storage/emulated/0/Music/Lunify/$safeFileName",
+            sizeBytes = 5242880L,
+        )
+
+        assertTrue(downloadedTrack.isDownloaded)
+        assertEquals("Lunify", downloadedTrack.folderName)
+        assertEquals(5242880L, downloadedTrack.sizeBytes)
+        assertEquals(videoId, downloadedTrack.id)
+    }
 }

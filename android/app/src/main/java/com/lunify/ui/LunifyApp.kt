@@ -348,8 +348,9 @@ fun LunifyApp(
             modifier = Modifier.align(Alignment.BottomCenter),
         ) {
             trackForOptions?.let { track ->
+                val isTrackDownloaded = track.isDownloaded || libraryStorage.isDownloaded(track.id)
                 TrackOptionsSheet(
-                    track = track,
+                    track = if (isTrackDownloaded) track.copy(isDownloaded = true) else track,
                     isFavorite = libraryStorage.isFavorite(track.id),
                     onToggleFavorite = {
                         audioPlayerManager.toggleFavorite(track)
@@ -357,8 +358,8 @@ fun LunifyApp(
                     },
                     onDeleteOrDownload = {
                         trackForOptions = null
-                        if (track.isDownloaded) {
-                            val deleted = localAudioRepository.deleteTrack(track)
+                        if (isTrackDownloaded) {
+                            val deleted = localAudioRepository.deleteTrack(track, libraryStorage)
                             if (deleted) {
                                 Toast.makeText(context, "Deleted \"${track.title}\"", Toast.LENGTH_SHORT).show()
                                 libraryRefreshTrigger++

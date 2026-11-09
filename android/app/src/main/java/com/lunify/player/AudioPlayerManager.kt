@@ -1,9 +1,13 @@
 package com.lunify.player
 
+import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
+import android.media.MediaScannerConnection
 import android.net.Uri
+import android.os.Build
 import android.os.Environment
+import android.provider.MediaStore
 import android.util.Log
 import androidx.annotation.OptIn
 import androidx.core.content.ContextCompat
@@ -45,6 +49,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.File
 import java.io.FileOutputStream
+import java.util.concurrent.TimeUnit
 
 /**
  * ==============================================================================
@@ -380,27 +385,48 @@ class AudioPlayerManager(
      * Downloads an online track to the device for offline playback.
      * Writes audio bytes to the app's external music directory and updates [LibraryStorage].
      */
+    /**
+     * Downloads an online track to the device for offline playback.
+     * Writes audio bytes with standard browser headers to avoid CDN 403 blocks,
+     * updates [LibraryStorage], and registers the song in Android's MediaStore.
+     */
     fun downloadTrack(track: Track, onComplete: ((Boolean) -> Unit)? = null) {
         scope.launch(Dispatchers.IO) {
             try {
+                Log.d(TAG, "Starting download for track: ${track.title} (${track.id})")
+
                 // 1. Resolve direct audio stream URL if not already present
-                val streamUrl = if (track.contentUri.startsWith("http")) {
+                val streamUrl = if (track.contentUri.startsWith("http://") || track.contentUri.startsWith("https://")) {
                     track.contentUri
                 } else {
                     onlineRepository.getAudioStreamUrl(track.id).getOrThrow()
                 }
 
-                // 2. Prepare destination file in device Music directory
-                val musicDir = context.getExternalFilesDir(Environment.DIRECTORY_MUSIC) ?: context.filesDir
-                val safeFileName = "${track.title.replace(Regex("[^a-zA-Z0-9.-]"), "_")}_${track.id}.m4a"
+                // 2. Prepare destination file in app's external music directory
+                val baseDir = context.getExternalFilesDir(Environment.DIRECTORY_MUSIC) ?: context.filesDir
+                val musicDir = File(baseDir, "Lunify").apply { mkdirs() }
+                val safeTitle = track.title.replace(Regex("[^a-zA-Z0-9.-]"), "_").take(50)
+                val safeFileName = "${safeTitle}_${track.id}.m4a"
                 val destinationFile = File(musicDir, safeFileName)
 
-                // 3. Download audio stream using OkHttpClient
-                val request = Request.Builder().url(streamUrl).build()
-                val okHttpClient = OkHttpClient()
+                // 3. Download audio stream with standard browser headers to prevent CDN 403 Forbidden
+                val okHttpClient = OkHttpClient.Builder()
+                    .connectTimeout(30, TimeUnit.SECONDS)
+                    .readTimeout(60, TimeUnit.SECONDS)
+                    .followRedirects(true)
+                    .followSslRedirects(true)
+                    .build()
+
+                val request = Request.Builder()
+                    .url(streamUrl)
+                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36")
+                    .header("Accept", "*/*")
+                    .build()
+
                 val response = okHttpClient.newCall(request).execute()
 
                 if (!response.isSuccessful) {
+                    Log.e(TAG, "Download failed with HTTP ${response.code} for ${track.title}")
                     response.close()
                     withContext(Dispatchers.Main) { onComplete?.invoke(false) }
                     return@launch
@@ -412,16 +438,44 @@ class AudioPlayerManager(
                     }
                 }
 
+                Log.d(TAG, "Audio file saved successfully: ${destinationFile.absolutePath} (${destinationFile.length()} bytes)")
+
                 // 4. Update track metadata as downloaded
                 val downloadedTrack = track.copy(
                     isDownloaded = true,
                     filePath = destinationFile.absolutePath,
                     contentUri = Uri.fromFile(destinationFile).toString(),
                     sizeBytes = destinationFile.length(),
+                    folderName = "Lunify",
                 )
 
-                // 5. Save track in local library storage
+                // 5. Persist into LibraryStorage
+                libraryStorage.saveDownloadedTrack(downloadedTrack)
                 libraryStorage.recordPlay(downloadedTrack.id)
+
+                // 6. Register with Android MediaStore & trigger system scanner
+                try {
+                    val contentValues = ContentValues().apply {
+                        put(MediaStore.Audio.Media.DISPLAY_NAME, safeFileName)
+                        put(MediaStore.Audio.Media.TITLE, track.title)
+                        put(MediaStore.Audio.Media.ARTIST, track.artist)
+                        put(MediaStore.Audio.Media.ALBUM, track.album.ifBlank { "Lunify" })
+                        put(MediaStore.Audio.Media.MIME_TYPE, "audio/mp4")
+                        put(MediaStore.Audio.Media.IS_MUSIC, 1)
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                            put(MediaStore.Audio.Media.RELATIVE_PATH, "${Environment.DIRECTORY_MUSIC}/Lunify")
+                        }
+                    }
+                    val mediaStoreUri = context.contentResolver.insert(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, contentValues)
+                    if (mediaStoreUri != null) {
+                        context.contentResolver.openOutputStream(mediaStoreUri)?.use { out ->
+                            destinationFile.inputStream().copyTo(out)
+                        }
+                    }
+                    MediaScannerConnection.scanFile(context, arrayOf(destinationFile.absolutePath), arrayOf("audio/mp4"), null)
+                } catch (e: Exception) {
+                    Log.w(TAG, "MediaStore registration notice: ${e.message}")
+                }
 
                 withContext(Dispatchers.Main) {
                     // If current track was the one downloaded, update state

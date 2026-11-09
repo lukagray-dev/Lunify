@@ -42,12 +42,14 @@ class LibraryStorage(context: Context) {
     private val historyCache = mutableListOf<HistoryItem>()
     private val playCountsCache = mutableMapOf<String, Int>()
     private val customPlaylistsCache = mutableListOf<Playlist>()
+    private val downloadedTracksCache = mutableListOf<Track>()
 
     init {
         loadFavoritesFromDisk()
         loadHistoryFromDisk()
         loadPlayCountsFromDisk()
         loadPlaylistsFromDisk()
+        loadDownloadedTracksFromDisk()
     }
 
     // ==========================================================================
@@ -362,6 +364,77 @@ class LibraryStorage(context: Context) {
     }
 
     // ==========================================================================
+    // DOWNLOADED TRACKS PERSISTENCE
+    // ==========================================================================
+
+    @Synchronized
+    fun isDownloaded(trackId: String): Boolean {
+        return downloadedTracksCache.any { it.id == trackId }
+    }
+
+    @Synchronized
+    fun getDownloadedTracks(): List<Track> {
+        return downloadedTracksCache.toList()
+    }
+
+    @Synchronized
+    fun saveDownloadedTrack(track: Track) {
+        val updated = downloadedTracksCache.filter { it.id != track.id }.toMutableList()
+        updated.add(0, track)
+        downloadedTracksCache.clear()
+        downloadedTracksCache.addAll(updated)
+        persistDownloadedTracksToDisk()
+    }
+
+    @Synchronized
+    fun deleteDownloadedTrack(trackId: String): Boolean {
+        val target = downloadedTracksCache.firstOrNull { it.id == trackId }
+        if (target != null) {
+            downloadedTracksCache.removeAll { it.id == trackId }
+            persistDownloadedTracksToDisk()
+            if (target.filePath.isNotBlank()) {
+                try {
+                    val file = java.io.File(target.filePath)
+                    if (file.exists()) {
+                        file.delete()
+                    }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
+            return true
+        }
+        return false
+    }
+
+    private fun loadDownloadedTracksFromDisk() {
+        downloadedTracksCache.clear()
+        val jsonString = prefs.getString(KEY_DOWNLOADED_TRACKS, null) ?: return
+        try {
+            val jsonArray = JSONArray(jsonString)
+            for (i in 0 until jsonArray.length()) {
+                val obj = jsonArray.getJSONObject(i)
+                val track = deserializeTrack(obj).copy(isDownloaded = true)
+                downloadedTracksCache.add(track)
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    private fun persistDownloadedTracksToDisk() {
+        try {
+            val jsonArray = JSONArray()
+            for (track in downloadedTracksCache) {
+                jsonArray.put(serializeTrack(track))
+            }
+            prefs.edit().putString(KEY_DOWNLOADED_TRACKS, jsonArray.toString()).apply()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    // ==========================================================================
     // JSON SERIALIZATION HELPERS
     // ==========================================================================
 
@@ -371,6 +444,7 @@ class LibraryStorage(context: Context) {
         private const val KEY_HISTORY = "key_history_json"
         private const val KEY_PLAY_COUNTS = "key_play_counts_json"
         private const val KEY_PLAYLISTS = "key_playlists_json"
+        private const val KEY_DOWNLOADED_TRACKS = "key_downloaded_tracks_json"
         private const val MAX_HISTORY_ENTRIES = 100
 
         fun serializeTrack(track: Track): JSONObject {

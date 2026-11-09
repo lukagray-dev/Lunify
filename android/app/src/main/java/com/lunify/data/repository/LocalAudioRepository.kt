@@ -5,6 +5,7 @@ import android.content.ContentUris
 import android.content.Context
 import android.net.Uri
 import android.provider.MediaStore
+import com.lunify.data.local.LibraryStorage
 import com.lunify.domain.model.Playlist
 import com.lunify.domain.model.Track
 import com.lunify.domain.model.TrackSortOption
@@ -39,11 +40,13 @@ import java.util.Locale
 class LocalAudioRepository(private val context: Context) {
 
     /**
-     * Scans and retrieves all available local audio tracks from the device's MediaStore.
+     * Scans and retrieves all available local audio tracks from the device's MediaStore,
+     * seamlessly merging any offline tracks downloaded directly by Lunify.
      *
+     * @param libraryStorage Optional [LibraryStorage] instance to merge app-downloaded tracks.
      * @return A list of [Track] objects ready to be queued into our audio player.
      */
-    fun getLocalAudioTracks(): List<Track> {
+    fun getLocalAudioTracks(libraryStorage: LibraryStorage? = null): List<Track> {
         val tracksList = mutableListOf<Track>()
 
         val audioUri: Uri = MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
@@ -153,6 +156,25 @@ class LocalAudioRepository(private val context: Context) {
             e.printStackTrace()
         }
 
+        // 2. Seamlessly merge app-downloaded tracks from LibraryStorage
+        if (libraryStorage != null) {
+            try {
+                val existingIds = tracksList.map { it.id }.toSet()
+                val existingPaths = tracksList.map { it.filePath }.toSet()
+                val appDownloads = libraryStorage.getDownloadedTracks()
+                for (download in appDownloads) {
+                    if (download.id !in existingIds && download.filePath !in existingPaths) {
+                        val file = File(download.filePath)
+                        if (file.exists() && file.length() > 0) {
+                            tracksList.add(download.copy(isDownloaded = true))
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+
         return tracksList
     }
 
@@ -171,15 +193,24 @@ class LocalAudioRepository(private val context: Context) {
     fun sortTracks(tracks: List<Track>, sortOption: TrackSortOption): List<Track> = Companion.sortTracks(tracks, sortOption)
 
     /**
-     * Deletes an audio track permanently from the device storage and MediaStore.
+     * Deletes an audio track permanently from the device storage, MediaStore,
+     * and local library persistent storage.
      *
      * @param track The track to delete.
+     * @param libraryStorage Optional [LibraryStorage] to unregister app downloads.
      * @return True if deleted successfully, false otherwise.
      */
-    fun deleteTrack(track: Track): Boolean {
+    fun deleteTrack(track: Track, libraryStorage: LibraryStorage? = null): Boolean {
         var isDeleted = false
 
-        // 1. Delete via ContentResolver (MediaStore)
+        // 1. Remove from app's local downloaded tracks storage
+        if (libraryStorage != null) {
+            if (libraryStorage.deleteDownloadedTrack(track.id)) {
+                isDeleted = true
+            }
+        }
+
+        // 2. Delete via ContentResolver (MediaStore)
         if (track.contentUri.isNotBlank()) {
             try {
                 val uri = Uri.parse(track.contentUri)
@@ -190,7 +221,7 @@ class LocalAudioRepository(private val context: Context) {
             }
         }
 
-        // 2. Direct file fallback if file exists on disk
+        // 3. Direct file fallback if file exists on disk
         if (track.filePath.isNotBlank()) {
             try {
                 val file = File(track.filePath)
