@@ -1,10 +1,12 @@
 package com.lunify.player
 
 import android.content.Context
+import android.content.Intent
 import android.net.Uri
 import android.os.Environment
 import android.util.Log
 import androidx.annotation.OptIn
+import androidx.core.content.ContextCompat
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem as ExoMediaItem
@@ -24,6 +26,7 @@ import com.lunify.domain.model.PlayerState
 import com.lunify.domain.model.PlayerStatus
 import com.lunify.domain.model.RepeatMode
 import com.lunify.domain.model.Track
+import com.lunify.player.service.LunifyMediaService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -286,12 +289,29 @@ class AudioPlayerManager(
 
     /**
      * Prepares and starts ExoPlayer playback with a direct media URI and metadata.
+     * Also synchronizes song title, artist, album, and artwork URI into MediaMetadata
+     * so Android SystemUI notifications and lock screen media players show rich artwork.
      */
     private fun playDirectUri(mediaUri: Uri, track: Track) {
+        val artworkUri = if (track.thumbnailUrl.isNotBlank()) {
+            try {
+                Uri.parse(track.thumbnailUrl)
+            } catch (e: Exception) {
+                null
+            }
+        } else {
+            null
+        }
+
         val metadata = MediaMetadata.Builder()
             .setTitle(track.title)
             .setArtist(track.artist)
-            .setAlbumTitle(track.album)
+            .setAlbumTitle(track.album.ifBlank { "Lunify" })
+            .apply {
+                if (artworkUri != null) {
+                    setArtworkUri(artworkUri)
+                }
+            }
             .build()
 
         val exoItem = ExoMediaItem.Builder()
@@ -303,6 +323,22 @@ class AudioPlayerManager(
         exoPlayer.setMediaItem(exoItem)
         exoPlayer.prepare()
         exoPlayer.play()
+
+        // Ensure background playback service and media notification are active
+        ensureServiceStarted()
+    }
+
+    /**
+     * Ensures our [LunifyMediaService] foreground service is alive, hosting
+     * the active MediaSession and system media notification shade.
+     */
+    fun ensureServiceStarted() {
+        try {
+            val intent = Intent(context, LunifyMediaService::class.java)
+            ContextCompat.startForegroundService(context, intent)
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not start LunifyMediaService: ${e.message}")
+        }
     }
 
     /**

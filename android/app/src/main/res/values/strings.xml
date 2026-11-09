@@ -1,3 +1,5 @@
 <resources>
     <string name="app_name">Lunify</string>
+    <string name="notification_channel_name">Lunify Playback</string>
+    <string name="notification_channel_description">Displays playback controls, artwork, and track information</string>
 </resources>
