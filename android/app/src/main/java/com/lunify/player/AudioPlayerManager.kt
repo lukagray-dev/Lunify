@@ -31,6 +31,7 @@ import com.lunify.domain.model.PlayerState
 import com.lunify.domain.model.PlayerStatus
 import com.lunify.domain.model.RepeatMode
 import com.lunify.domain.model.Track
+import com.lunify.player.download.ChunkedAudioDownloader
 import com.lunify.player.download.DownloadNotificationManager
 import com.lunify.player.service.LunifyMediaService
 import kotlinx.coroutines.CoroutineScope
@@ -46,11 +47,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import okhttp3.OkHttpClient
-import okhttp3.Request
 import java.io.File
-import java.io.FileOutputStream
-import java.util.concurrent.TimeUnit
 
 /**
  * ==============================================================================
@@ -92,6 +89,7 @@ class AudioPlayerManager(
     val libraryStorage: LibraryStorage,
     private val onlineRepository: OnlineMusicRepository = OnlineMusicRepository(),
     private val downloadNotificationManager: DownloadNotificationManager = DownloadNotificationManager(context),
+    private val chunkedDownloader: ChunkedAudioDownloader = ChunkedAudioDownloader(),
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var progressTickerJob: Job? = null
@@ -420,72 +418,39 @@ class AudioPlayerManager(
                 val safeFileName = "${safeTitle}_${track.id}.m4a"
                 val destinationFile = File(musicDir, safeFileName)
 
-                // 3. Download audio stream with standard browser headers to prevent CDN 403 Forbidden
-                val okHttpClient = OkHttpClient.Builder()
-                    .connectTimeout(30, TimeUnit.SECONDS)
-                    .readTimeout(60, TimeUnit.SECONDS)
-                    .followRedirects(true)
-                    .followSslRedirects(true)
-                    .build()
-
-                val request = Request.Builder()
-                    .url(streamUrl)
-                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36")
-                    .header("Accept", "*/*")
-                    .build()
-
-                val response = okHttpClient.newCall(request).execute()
-
-                if (!response.isSuccessful) {
-                    Log.e(TAG, "Download failed with HTTP ${response.code} for ${track.title}")
-                    response.close()
-                    downloadNotificationManager.showDownloadFailed(track)
-                    withContext(Dispatchers.Main) { onComplete?.invoke(false) }
-                    return@launch
-                }
-
-                val body = response.body
-                val contentLength = body?.contentLength() ?: -1L
-                var downloadedBytes = 0L
+                // 3. High-speed chunked download with YouTube CDN throttle avoidance
                 var lastNotifiedTime = System.currentTimeMillis()
                 var lastNotifiedPercent = -1
 
-                val buffer = ByteArray(32 * 1024) // 32KB buffer for optimal I/O throughput
-                body?.byteStream()?.use { input ->
-                    FileOutputStream(destinationFile).use { output ->
-                        var bytesRead: Int
-                        while (input.read(buffer).also { bytesRead = it } != -1) {
-                            output.write(buffer, 0, bytesRead)
-                            downloadedBytes += bytesRead
-
-                            val currentTime = System.currentTimeMillis()
-                            if (contentLength > 0L) {
-                                val percent = ((downloadedBytes * 100) / contentLength).toInt().coerceIn(0, 100)
-                                // Throttle notification updates: notify every 2% increase, or every 400ms, or at 100%
-                                if (percent != lastNotifiedPercent && (percent - lastNotifiedPercent >= 2 || currentTime - lastNotifiedTime >= 400L || percent == 100)) {
-                                    lastNotifiedPercent = percent
-                                    lastNotifiedTime = currentTime
-                                    downloadNotificationManager.showDownloadProgress(
-                                        track = track,
-                                        progressPercent = percent,
-                                        downloadedBytes = downloadedBytes,
-                                        totalBytes = contentLength,
-                                    )
-                                }
-                            } else {
-                                // For indeterminate streams without Content-Length, update byte counters every 1000ms
-                                if (currentTime - lastNotifiedTime >= 1000L) {
-                                    lastNotifiedTime = currentTime
-                                    downloadNotificationManager.showDownloadProgress(
-                                        track = track,
-                                        progressPercent = -1,
-                                        downloadedBytes = downloadedBytes,
-                                        totalBytes = -1L,
-                                    )
-                                }
-                            }
+                chunkedDownloader.downloadToFile(
+                    streamUrl = streamUrl,
+                    destinationFile = destinationFile,
+                ) { downloadedBytes, totalBytes ->
+                    val currentTime = System.currentTimeMillis()
+                    if (totalBytes > 0L) {
+                        val percent = ((downloadedBytes * 100) / totalBytes).toInt().coerceIn(0, 100)
+                        // Throttle notification updates: notify every 2% increase, or every 400ms, or at 100%
+                        if (percent != lastNotifiedPercent && (percent - lastNotifiedPercent >= 2 || currentTime - lastNotifiedTime >= 400L || percent == 100)) {
+                            lastNotifiedPercent = percent
+                            lastNotifiedTime = currentTime
+                            downloadNotificationManager.showDownloadProgress(
+                                track = track,
+                                progressPercent = percent,
+                                downloadedBytes = downloadedBytes,
+                                totalBytes = totalBytes,
+                            )
                         }
-                        output.flush()
+                    } else {
+                        // For indeterminate streams without Content-Length, update byte counters every 1000ms
+                        if (currentTime - lastNotifiedTime >= 1000L) {
+                            lastNotifiedTime = currentTime
+                            downloadNotificationManager.showDownloadProgress(
+                                track = track,
+                                progressPercent = -1,
+                                downloadedBytes = downloadedBytes,
+                                totalBytes = -1L,
+                            )
+                        }
                     }
                 }
 
