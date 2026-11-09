@@ -4,9 +4,11 @@ import android.content.Context
 import android.content.SharedPreferences
 import com.lunify.domain.model.HistoryItem
 import com.lunify.domain.model.PlaybackSource
+import com.lunify.domain.model.Playlist
 import com.lunify.domain.model.Track
 import org.json.JSONArray
 import org.json.JSONObject
+import java.util.UUID
 
 /**
  * ==============================================================================
@@ -15,22 +17,16 @@ import org.json.JSONObject
  *
  * Hey friend! Welcome to the local persistence module for Lunify.
  *
- * WHY DOES THIS EXIST?
- * --------------------
- * When a user hearts a song (Favorites) or plays music throughout their day
- * (History), we want those actions to be remembered even after the app is closed,
- * updated, or the device is rebooted.
- *
- * HOW IT WORKS:
- * -------------
- * Instead of adding heavy database bloat (like SQLite migrations or Room annotation
- * processing) for simple user preferences, we utilize Android's rock-solid
- * `SharedPreferences` paired with lightweight JSON serialization (`org.json`).
- *
- * This provides:
- * 1. Zero extra binary footprint (built directly into the Android framework).
- * 2. Instant synchronous reads on startup without blocking the UI thread.
- * 3. Simple, human-readable data structures that are easy to debug and test.
+ * WHAT DOES THIS CLASS DO?
+ * ------------------------
+ * Manages all user-level customizations and playback analytics that must survive
+ * app reboots and app updates:
+ * 1. Favorites: Track IDs and cached metadata for favorited songs.
+ * 2. Playback History: Chronological log of played tracks with OFFLINE / ONLINE tags.
+ * 3. Play Counts: Number of times each track has been played (used by "Times played" sort).
+ * 4. Custom Metadata Playlists: User-created playlists containing track IDs.
+ *    (Folders on device are recognized as folder playlists without copying files,
+ *    and user custom playlists are stored as metadata).
  * ==============================================================================
  */
 class LibraryStorage(context: Context) {
@@ -40,58 +36,43 @@ class LibraryStorage(context: Context) {
         Context.MODE_PRIVATE
     )
 
-    // In-memory cache for fast lookups
+    // In-memory cache for ultra-fast lookups
     private val favoriteIdsCache = mutableSetOf<String>()
     private val favoriteTracksCache = mutableListOf<Track>()
     private val historyCache = mutableListOf<HistoryItem>()
+    private val playCountsCache = mutableMapOf<String, Int>()
+    private val customPlaylistsCache = mutableListOf<Playlist>()
 
     init {
-        // Load initial favorites and history into memory
         loadFavoritesFromDisk()
         loadHistoryFromDisk()
+        loadPlayCountsFromDisk()
+        loadPlaylistsFromDisk()
     }
 
     // ==========================================================================
     // FAVORITES MANAGEMENT
     // ==========================================================================
 
-    /**
-     * Checks if a track ID has been favorited by the user.
-     */
     @Synchronized
     fun isFavorite(trackId: String): Boolean {
         return favoriteIdsCache.contains(trackId)
     }
 
-    /**
-     * Retrieves all tracks favorited by the user.
-     */
     @Synchronized
     fun getFavoriteTracks(): List<Track> {
         return favoriteTracksCache.toList()
     }
 
-    /**
-     * Toggles the favorite status of a track.
-     *
-     * If the track was already in favorites, it is removed.
-     * If it was not favorited, it is added to the top of the favorites list.
-     *
-     * @param track The song to toggle.
-     * @return The new favorite status (true if now liked, false if unliked).
-     */
     @Synchronized
     fun toggleFavorite(track: Track): Boolean {
         val nowFavorite: Boolean
         if (favoriteIdsCache.contains(track.id)) {
-            // Remove from favorites
             favoriteIdsCache.remove(track.id)
             favoriteTracksCache.removeAll { it.id == track.id }
             nowFavorite = false
         } else {
-            // Add to favorites
             favoriteIdsCache.add(track.id)
-            // Ensure track marked as favorite
             favoriteTracksCache.add(0, track.copy(isFavorite = true))
             nowFavorite = true
         }
@@ -131,44 +112,77 @@ class LibraryStorage(context: Context) {
     }
 
     // ==========================================================================
+    // PLAY COUNT MANAGEMENT (FOR "TIMES PLAYED" SORTING)
+    // ==========================================================================
+
+    @Synchronized
+    fun getPlayCount(trackId: String): Int {
+        return playCountsCache[trackId] ?: 0
+    }
+
+    @Synchronized
+    fun recordPlay(trackId: String) {
+        val current = playCountsCache[trackId] ?: 0
+        playCountsCache[trackId] = current + 1
+        persistPlayCountsToDisk()
+    }
+
+    private fun loadPlayCountsFromDisk() {
+        playCountsCache.clear()
+        val jsonString = prefs.getString(KEY_PLAY_COUNTS, null) ?: return
+        try {
+            val obj = JSONObject(jsonString)
+            val keys = obj.keys()
+            while (keys.hasNext()) {
+                val key = keys.next()
+                playCountsCache[key] = obj.getInt(key)
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    private fun persistPlayCountsToDisk() {
+        try {
+            val obj = JSONObject()
+            for ((key, count) in playCountsCache) {
+                obj.put(key, count)
+            }
+            prefs.edit().putString(KEY_PLAY_COUNTS, obj.toString()).apply()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    // ==========================================================================
     // HISTORY MANAGEMENT
     // ==========================================================================
 
-    /**
-     * Retrieves the list of recently played tracks with their timestamps and source tags.
-     */
     @Synchronized
     fun getPlaybackHistory(): List<HistoryItem> {
         return historyCache.toList()
     }
 
-    /**
-     * Records a track into the user's playback history.
-     *
-     * If the same song was played previously, its older entry is removed and
-     * moved to the very top with the newest timestamp.
-     * We keep a maximum of [MAX_HISTORY_ENTRIES] to prevent unbounded storage growth.
-     *
-     * @param track The song that was played.
-     * @param source Tags whether it was played from device storage (OFFLINE) or streamed (ONLINE).
-     */
     @Synchronized
     fun addToHistory(
         track: Track,
         source: PlaybackSource = if (track.isDownloaded) PlaybackSource.OFFLINE else PlaybackSource.ONLINE
     ) {
-        // Remove any existing entry of the exact same track so it moves to top
+        // Increment play count whenever song is played
+        recordPlay(track.id)
+
         historyCache.removeAll { it.track.id == track.id }
 
-        // Create new history entry
         val item = HistoryItem(
-            track = track.copy(isFavorite = isFavorite(track.id)),
+            track = track.copy(
+                isFavorite = isFavorite(track.id),
+                playCount = getPlayCount(track.id)
+            ),
             playedAtTimestamp = System.currentTimeMillis(),
             source = source,
         )
         historyCache.add(0, item)
 
-        // Trim history list to max capacity
         if (historyCache.size > MAX_HISTORY_ENTRIES) {
             historyCache.subList(MAX_HISTORY_ENTRIES, historyCache.size).clear()
         }
@@ -176,9 +190,6 @@ class LibraryStorage(context: Context) {
         persistHistoryToDisk()
     }
 
-    /**
-     * Clears all recorded playback history.
-     */
     @Synchronized
     fun clearHistory() {
         historyCache.clear()
@@ -205,7 +216,10 @@ class LibraryStorage(context: Context) {
                 val track = deserializeTrack(trackObj)
                 historyCache.add(
                     HistoryItem(
-                        track = track.copy(isFavorite = isFavorite(track.id)),
+                        track = track.copy(
+                            isFavorite = isFavorite(track.id),
+                            playCount = getPlayCount(track.id)
+                        ),
                         playedAtTimestamp = playedAt,
                         source = source,
                     )
@@ -234,6 +248,120 @@ class LibraryStorage(context: Context) {
     }
 
     // ==========================================================================
+    // CUSTOM PLAYLISTS MANAGEMENT (STORED AS METADATA)
+    // ==========================================================================
+
+    @Synchronized
+    fun getCustomPlaylists(): List<Playlist> {
+        return customPlaylistsCache.toList()
+    }
+
+    @Synchronized
+    fun createPlaylist(name: String): Playlist {
+        val playlist = Playlist(
+            id = UUID.randomUUID().toString(),
+            name = name.ifBlank { "Untitled Playlist" },
+            trackIds = emptyList(),
+            isFolderPlaylist = false,
+            createdAt = System.currentTimeMillis(),
+        )
+        customPlaylistsCache.add(0, playlist)
+        persistPlaylistsToDisk()
+        return playlist
+    }
+
+    @Synchronized
+    fun addTrackToPlaylist(playlistId: String, trackId: String) {
+        val index = customPlaylistsCache.indexOfFirst { it.id == playlistId }
+        if (index != -1) {
+            val existing = customPlaylistsCache[index]
+            if (!existing.trackIds.contains(trackId)) {
+                customPlaylistsCache[index] = existing.copy(
+                    trackIds = existing.trackIds + trackId
+                )
+                persistPlaylistsToDisk()
+            }
+        }
+    }
+
+    @Synchronized
+    fun removeTrackFromPlaylist(playlistId: String, trackId: String) {
+        val index = customPlaylistsCache.indexOfFirst { it.id == playlistId }
+        if (index != -1) {
+            val existing = customPlaylistsCache[index]
+            customPlaylistsCache[index] = existing.copy(
+                trackIds = existing.trackIds.filter { it != trackId }
+            )
+            persistPlaylistsToDisk()
+        }
+    }
+
+    @Synchronized
+    fun deletePlaylist(playlistId: String) {
+        customPlaylistsCache.removeAll { it.id == playlistId }
+        persistPlaylistsToDisk()
+    }
+
+    private fun loadPlaylistsFromDisk() {
+        customPlaylistsCache.clear()
+        val jsonString = prefs.getString(KEY_PLAYLISTS, null) ?: return
+        try {
+            val jsonArray = JSONArray(jsonString)
+            for (i in 0 until jsonArray.length()) {
+                val obj = jsonArray.getJSONObject(i)
+                val id = obj.getString("id")
+                val name = obj.getString("name")
+                val isFolder = obj.optBoolean("isFolder", false)
+                val folderPath = obj.optString("folderPath", "")
+                val createdAt = obj.optLong("createdAt", System.currentTimeMillis())
+
+                val trackIdsArray = obj.getJSONArray("trackIds")
+                val trackIds = mutableListOf<String>()
+                for (j in 0 until trackIdsArray.length()) {
+                    trackIds.add(trackIdsArray.getString(j))
+                }
+
+                customPlaylistsCache.add(
+                    Playlist(
+                        id = id,
+                        name = name,
+                        trackIds = trackIds,
+                        isFolderPlaylist = isFolder,
+                        folderPath = folderPath,
+                        createdAt = createdAt,
+                    )
+                )
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    private fun persistPlaylistsToDisk() {
+        try {
+            val jsonArray = JSONArray()
+            for (p in customPlaylistsCache) {
+                val obj = JSONObject().apply {
+                    put("id", p.id)
+                    put("name", p.name)
+                    put("isFolder", p.isFolderPlaylist)
+                    put("folderPath", p.folderPath)
+                    put("createdAt", p.createdAt)
+                    val tracksArr = JSONArray()
+                    for (tid in p.trackIds) {
+                        tracksArr.put(tid)
+                    }
+                    put("trackIds", tracksArr)
+                }
+                jsonArray.put(obj)
+            }
+            prefs.edit().putString(KEY_PLAYLISTS, jsonArray.toString()).apply()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    // ==========================================================================
     // JSON SERIALIZATION HELPERS
     // ==========================================================================
 
@@ -241,6 +369,8 @@ class LibraryStorage(context: Context) {
         private const val PREFS_NAME = "lunify_library_prefs"
         private const val KEY_FAVORITES = "key_favorite_tracks_json"
         private const val KEY_HISTORY = "key_history_json"
+        private const val KEY_PLAY_COUNTS = "key_play_counts_json"
+        private const val KEY_PLAYLISTS = "key_playlists_json"
         private const val MAX_HISTORY_ENTRIES = 100
 
         fun serializeTrack(track: Track): JSONObject {
@@ -257,6 +387,10 @@ class LibraryStorage(context: Context) {
                 put("isFavorite", track.isFavorite)
                 put("contentUri", track.contentUri)
                 put("sizeBytes", track.sizeBytes)
+                put("filePath", track.filePath)
+                put("folderName", track.folderName)
+                put("dateAdded", track.dateAdded)
+                put("playCount", track.playCount)
             }
         }
 
@@ -274,6 +408,10 @@ class LibraryStorage(context: Context) {
                 isFavorite = obj.optBoolean("isFavorite", false),
                 contentUri = obj.optString("contentUri", ""),
                 sizeBytes = obj.optLong("sizeBytes", 0L),
+                filePath = obj.optString("filePath", ""),
+                folderName = obj.optString("folderName", ""),
+                dateAdded = obj.optLong("dateAdded", 0L),
+                playCount = obj.optInt("playCount", 0),
             )
         }
     }

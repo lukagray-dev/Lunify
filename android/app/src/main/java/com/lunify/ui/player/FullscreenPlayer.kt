@@ -369,16 +369,22 @@ fun FullscreenPlayer(
             Spacer(modifier = Modifier.height(20.dp))
 
             // F. Bottom Action Pills (Lyrics, Queue, Duo)
+            val hasLyrics = lyrics != null && lyrics.lines.isNotEmpty()
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceEvenly,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                // Lyrics Pill Toggle
+                // Lyrics Pill Toggle (disabled when track has no lyrics)
                 LiquidGlassContainer(
                     shape = CircleShape,
-                    backgroundColor = if (showLyrics) Color.White else GlassSurfaceElevated,
-                    onClick = onToggleLyrics,
+                    backgroundColor = when {
+                        !hasLyrics -> GlassSurfaceElevated.copy(alpha = 0.35f)
+                        showLyrics -> Color.White
+                        else -> GlassSurfaceElevated
+                    },
+                    onClick = if (hasLyrics) onToggleLyrics else null,
                     modifier = Modifier.height(38.dp),
                 ) {
                     Row(
@@ -390,13 +396,21 @@ fun FullscreenPlayer(
                             iconRes = LucideIcons.Music,
                             contentDescription = null,
                             size = 14.dp,
-                            tint = if (showLyrics) Color.Black else TextSecondary,
+                            tint = when {
+                                !hasLyrics -> TextMuted
+                                showLyrics -> Color.Black
+                                else -> TextSecondary
+                            },
                         )
                         Text(
-                            text = "Lyrics",
+                            text = if (hasLyrics) "Lyrics" else "No Lyrics",
                             fontSize = 12.sp,
                             fontWeight = FontWeight.SemiBold,
-                            color = if (showLyrics) Color.Black else TextPrimary,
+                            color = when {
+                                !hasLyrics -> TextMuted
+                                showLyrics -> Color.Black
+                                else -> TextPrimary
+                            },
                         )
                     }
                 }

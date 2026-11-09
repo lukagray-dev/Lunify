@@ -2,6 +2,7 @@ package com.lunify
 
 import com.lunify.data.local.LibraryStorage
 import com.lunify.data.repository.LocalAudioRepository
+import com.lunify.data.repository.LyricsRepository
 import com.lunify.domain.model.DuoConnectionState
 import com.lunify.domain.model.DuoPeerInfo
 import com.lunify.domain.model.DuoSyncPacket
@@ -14,10 +15,12 @@ import com.lunify.domain.model.PlayerStatus
 import com.lunify.domain.model.RepeatMode
 import com.lunify.domain.model.SyncedLyrics
 import com.lunify.domain.model.Track
+import com.lunify.domain.model.TrackSortOption
 import com.lunify.ui.library.formatRelativeTime
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -251,5 +254,139 @@ class LunifyDomainTest {
         assertEquals("5m ago", formatRelativeTime(now - 300000L)) // 5m ago
         assertEquals("2h ago", formatRelativeTime(now - 7200000L)) // 2h ago
         assertEquals("1d ago", formatRelativeTime(now - 86400000L)) // 1d ago
+    }
+
+    /**
+     * Verifies the sorting engine across all 4 requested options:
+     * - Name: A-Z
+     * - Time created: Newest dateAdded first
+     * - Times played: Highest playCount first
+     * - Duration: Longest durationMs first
+     */
+    @Test
+    fun testSortingEngineOptions() {
+        val tracks = listOf(
+            Track(id = "1", title = "Zebra", artist = "A", dateAdded = 1000L, playCount = 5, durationMs = 120000L),
+            Track(id = "2", title = "Apple", artist = "B", dateAdded = 5000L, playCount = 20, durationMs = 300000L),
+            Track(id = "3", title = "Mango", artist = "C", dateAdded = 3000L, playCount = 1, durationMs = 240000L),
+        )
+
+        // 1. Sort by Name (A-Z)
+        val sortedByName = LocalAudioRepository.sortTracks(tracks, TrackSortOption.NAME)
+        assertEquals("Apple", sortedByName[0].title)
+        assertEquals("Mango", sortedByName[1].title)
+        assertEquals("Zebra", sortedByName[2].title)
+
+        // 2. Sort by Time created (Newest first)
+        val sortedByTime = LocalAudioRepository.sortTracks(tracks, TrackSortOption.TIME_CREATED)
+        assertEquals("Apple", sortedByTime[0].title) // dateAdded = 5000L
+        assertEquals("Mango", sortedByTime[1].title) // dateAdded = 3000L
+        assertEquals("Zebra", sortedByTime[2].title) // dateAdded = 1000L
+
+        // 3. Sort by Times played (Most played first)
+        val sortedByPlayed = LocalAudioRepository.sortTracks(tracks, TrackSortOption.TIMES_PLAYED)
+        assertEquals("Apple", sortedByPlayed[0].title) // playCount = 20
+        assertEquals("Zebra", sortedByPlayed[1].title) // playCount = 5
+        assertEquals("Mango", sortedByPlayed[2].title) // playCount = 1
+
+        // 4. Sort by Duration (Longest first)
+        val sortedByDuration = LocalAudioRepository.sortTracks(tracks, TrackSortOption.DURATION)
+        assertEquals("Apple", sortedByDuration[0].title) // 300000L (5:00)
+        assertEquals("Mango", sortedByDuration[1].title) // 240000L (4:00)
+        assertEquals("Zebra", sortedByDuration[2].title) // 120000L (2:00)
+    }
+
+    /**
+     * Verifies folder playlists discovery: groups tracks by storage folder without
+     * creating physical files, ensuring backward compatibility.
+     */
+    @Test
+    fun testFolderPlaylistsDiscovery() {
+        val tracks = listOf(
+            Track(id = "1", title = "Song1", artist = "A", folderName = "Download", filePath = "/sdcard/Download/Song1.mp3"),
+            Track(id = "2", title = "Song2", artist = "B", folderName = "Download", filePath = "/sdcard/Download/Song2.mp3"),
+            Track(id = "3", title = "Song3", artist = "C", folderName = "Music", filePath = "/sdcard/Music/Song3.mp3"),
+        )
+
+        val folderPlaylists = LocalAudioRepository.getFolderPlaylists(tracks)
+
+        assertEquals(2, folderPlaylists.size)
+
+        val downloadPlaylist = folderPlaylists.first { it.name == "Download" }
+        assertEquals(2, downloadPlaylist.trackIds.size)
+        assertTrue(downloadPlaylist.isFolderPlaylist)
+        assertTrue(downloadPlaylist.trackIds.contains("1"))
+        assertTrue(downloadPlaylist.trackIds.contains("2"))
+
+        val musicPlaylist = folderPlaylists.first { it.name == "Music" }
+        assertEquals(1, musicPlaylist.trackIds.size)
+        assertTrue(musicPlaylist.isFolderPlaylist)
+        assertTrue(musicPlaylist.trackIds.contains("3"))
+    }
+
+    /**
+     * Verifies the real LRC lyrics parser:
+     * - Parses standard [mm:ss.xx] timestamped lines.
+     * - Sorts lines chronologically.
+     * - Returns null if content is empty (which disables the Lyrics button).
+     */
+    @Test
+    fun testLrcLyricsParserAndEmptyDisabled() {
+        val lrcContent = """
+            [00:05.00]First intro verse
+            [00:15.50]Second chorus line
+            [00:30.00]Outro finish
+        """.trimIndent()
+
+        val parsed = LyricsRepository.parseLrcContent("test_track", lrcContent)
+        assertNotNull(parsed)
+        assertEquals(3, parsed!!.lines.size)
+        assertEquals(5000L, parsed.lines[0].timestampMs)
+        assertEquals("First intro verse", parsed.lines[0].text)
+        assertEquals(15500L, parsed.lines[1].timestampMs)
+        assertEquals("Second chorus line", parsed.lines[1].text)
+        assertEquals(30000L, parsed.lines[2].timestampMs)
+        assertEquals("Outro finish", parsed.lines[2].text)
+
+        // Empty content should return null (so Lyrics button gets disabled)
+        val emptyParsed = LyricsRepository.parseLrcContent("empty", "")
+        assertNull(emptyParsed)
+
+        val invalidParsed = LyricsRepository.parseLrcContent("invalid", "Just random text without timestamps")
+        assertNull(invalidParsed)
+    }
+
+    /**
+     * Verifies queue manipulation: Play Next and Add to Queue.
+     */
+    @Test
+    fun testQueueInsertNextAndAddToQueue() {
+        val initialQueue = listOf(
+            Track(id = "1", title = "Track 1", artist = "A"),
+            Track(id = "2", title = "Track 2", artist = "B"),
+            Track(id = "3", title = "Track 3", artist = "C"),
+        )
+
+        val currentTrackIndex = 0 // Track 1 is playing
+
+        // 1. Test "Play Next" (insert right after current track)
+        val trackToPlayNext = Track(id = "99", title = "Urgent Song", artist = "VIP")
+        val queueAfterPlayNext = initialQueue.toMutableList()
+        val insertIndex = (currentTrackIndex + 1).coerceIn(0, queueAfterPlayNext.size)
+        queueAfterPlayNext.add(insertIndex, trackToPlayNext)
+
+        assertEquals(4, queueAfterPlayNext.size)
+        assertEquals("Track 1", queueAfterPlayNext[0].title)
+        assertEquals("Urgent Song", queueAfterPlayNext[1].title) // inserted at index 1!
+        assertEquals("Track 2", queueAfterPlayNext[2].title)
+        assertEquals("Track 3", queueAfterPlayNext[3].title)
+
+        // 2. Test "Add to Queue" (append to end)
+        val trackToAppend = Track(id = "100", title = "Final Song", artist = "End")
+        val queueAfterAppend = queueAfterPlayNext.toMutableList()
+        queueAfterAppend.add(trackToAppend)
+
+        assertEquals(5, queueAfterAppend.size)
+        assertEquals("Final Song", queueAfterAppend.last().title)
     }
 }

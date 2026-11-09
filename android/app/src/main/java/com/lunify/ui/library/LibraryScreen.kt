@@ -1,12 +1,21 @@
 package com.lunify.ui.library
 
 import android.Manifest
+import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -27,6 +36,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
@@ -51,11 +62,17 @@ import com.lunify.data.repository.LocalAudioRepository
 import com.lunify.domain.model.HistoryItem
 import com.lunify.domain.model.PlaybackSource
 import com.lunify.domain.model.PlayerState
+import com.lunify.domain.model.Playlist
 import com.lunify.domain.model.Track
+import com.lunify.domain.model.TrackSortOption
+import com.lunify.player.AudioPlayerManager
+import com.lunify.ui.components.AddToPlaylistSheet
 import com.lunify.ui.components.LiquidGlassContainer
 import com.lunify.ui.components.LucideIcon
 import com.lunify.ui.components.LucideIconButton
 import com.lunify.ui.components.LucideIcons
+import com.lunify.ui.components.SortOptionsSheet
+import com.lunify.ui.components.TrackOptionsSheet
 import com.lunify.ui.components.TrackRowItem
 import com.lunify.ui.theme.AccentCyan
 import com.lunify.ui.theme.AccentEmerald
@@ -77,21 +94,22 @@ import java.util.Locale
  * Lunify - Library & Offline Downloads Screen (LibraryScreen.kt)
  * ==============================================================================
  *
- * Hey friend! Welcome to the real, fully functional offline library screen!
+ * Hey friend! This screen manages the user's offline media library.
  *
- * WHAT HAS BEEN IMPLEMENTED HERE:
- * 1. Real Device Audio Scanning:
- *    - Automatically checks and requests Android audio permissions (`READ_MEDIA_AUDIO`
- *      on Android 13+ / API 33+, and `READ_EXTERNAL_STORAGE` on older APIs).
- *    - Loads real MP3, FLAC, M4A, and AAC songs present on the physical device.
- * 2. Accurate Live Storage Indicator:
- *    - Calculates the real cumulative byte size of scanned music files and displays
- *      an exact formatted metric (e.g., "450.2 MB Used" or "1.4 GB Used") in the top right.
- * 3. Subtabs Management:
- *    - Downloaded: Scanned local audio files with "Play All" and "Shuffle" actions.
- *    - Favorites: Dynamically synchronized with player heart clicks, persisted on disk.
- *    - History: Live chronological log of played songs tagged as OFFLINE or ONLINE.
- *    - Playlists: Curated groupings and smart playlists.
+ * FEATURES IMPLEMENTED HERE:
+ * 1. Track Options Pop-up:
+ *    - Vertical 3 dots icon replaces legacy copy icon.
+ *    - Provides Like/Unlike, Delete/Download, Add to Playlist, Play Next,
+ *      Add to Queue, and Share actions.
+ * 2. Downloaded Audio Sorting:
+ *    - Funnel icon button beside Play All & Shuffle.
+ *    - Opens SortOptionsSheet for Name, Time created, Times played, Duration.
+ * 3. Folder Playlists & Custom Metadata Playlists:
+ *    - Automatic discovery of folders containing audio files as playlists.
+ *    - Backward-compatible: does NOT move or copy files, preserving file tree.
+ *    - User-created custom playlists saved as lightweight metadata.
+ * 4. Real Media Scanning & Accurate Storage Indicators:
+ *    - Real-time MediaStore indexing and cumulative storage footprint.
  * ==============================================================================
  */
 
@@ -102,6 +120,11 @@ fun LibraryScreen(
     playerState: PlayerState,
     onTrackSelect: (Track) -> Unit,
     onPlayQueue: (List<Track>, Track) -> Unit = { queue, track -> onTrackSelect(track) },
+    onOpenTrackOptions: (Track) -> Unit,
+    currentSortOption: TrackSortOption = TrackSortOption.NAME,
+    onOpenSortSheet: () -> Unit = {},
+    refreshTrigger: Int = 0,
+    audioPlayerManager: AudioPlayerManager,
     libraryStorage: LibraryStorage,
     localAudioRepository: LocalAudioRepository,
     modifier: Modifier = Modifier,
@@ -109,7 +132,7 @@ fun LibraryScreen(
     val context = LocalContext.current
     var selectedTab by remember { mutableStateOf("Downloaded") }
 
-    // Android 13 (Tiramisu, API 33) introduced granular media permissions
+    // Media Permissions (Android 13+ vs Android 12-)
     val permissionToRequest = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
         Manifest.permission.READ_MEDIA_AUDIO
     } else {
@@ -125,7 +148,13 @@ fun LibraryScreen(
     var localTracks by remember { mutableStateOf<List<Track>>(emptyList()) }
     var isLoadingTracks by remember { mutableStateOf(false) }
 
-    // Launcher for requesting runtime media permission
+    // Active playlist being viewed in detail
+    var activePlaylistDetail by remember { mutableStateOf<Playlist?>(null) }
+
+    // Custom playlists state
+    var customPlaylists by remember { mutableStateOf(libraryStorage.getCustomPlaylists()) }
+
+    // Permission launcher
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { isGranted ->
@@ -137,34 +166,43 @@ fun LibraryScreen(
         }
     }
 
-    // Load device audio files as soon as permission is confirmed
-    LaunchedEffect(hasAudioPermission) {
+    LaunchedEffect(hasAudioPermission, refreshTrigger) {
         if (hasAudioPermission) {
             isLoadingTracks = true
             localTracks = localAudioRepository.getLocalAudioTracks()
+            customPlaylists = libraryStorage.getCustomPlaylists()
             isLoadingTracks = false
         }
     }
 
-    // Calculate real storage consumption in bytes
+    // Storage metric computation
     val totalStorageBytes = remember(localTracks) {
         localAudioRepository.calculateTotalStorageBytes(localTracks)
     }
-
     val formattedStorageString = remember(totalStorageBytes, hasAudioPermission) {
-        if (!hasAudioPermission) {
-            "Storage Locked"
-        } else {
-            LocalAudioRepository.formatStorageSize(totalStorageBytes)
+        if (!hasAudioPermission) "Storage Locked" else LocalAudioRepository.formatStorageSize(totalStorageBytes)
+    }
+
+    // Sorted local tracks based on selected sort option
+    val sortedLocalTracks = remember(localTracks, currentSortOption) {
+        // Attach latest play counts before sorting
+        val tracksWithPlayCounts = localTracks.map { track ->
+            track.copy(playCount = libraryStorage.getPlayCount(track.id))
         }
+        localAudioRepository.sortTracks(tracksWithPlayCounts, currentSortOption)
+    }
+
+    // Folder playlists derived from local tracks
+    val folderPlaylists = remember(localTracks) {
+        localAudioRepository.getFolderPlaylists(localTracks)
     }
 
     // Dynamically retrieve favorites and history from persistent storage
-    val favoriteTracks = remember(selectedTab, playerState.currentTrack?.isFavorite) {
+    val favoriteTracks = remember(selectedTab, playerState.currentTrack?.isFavorite, refreshTrigger) {
         libraryStorage.getFavoriteTracks()
     }
 
-    var historyItems by remember(selectedTab, playerState.currentTrack) {
+    var historyItems by remember(selectedTab, playerState.currentTrack, refreshTrigger) {
         mutableStateOf(libraryStorage.getPlaybackHistory())
     }
 
@@ -195,7 +233,7 @@ fun LibraryScreen(
                     fontWeight = FontWeight.Bold,
                 )
 
-                // Real storage usage badge reflecting scanned audio files
+                // Storage usage badge
                 LiquidGlassContainer(
                     shape = CircleShape,
                     backgroundColor = GlassSurfaceElevated,
@@ -258,7 +296,10 @@ fun LibraryScreen(
                             .clickable(
                                 interactionSource = interactionSource,
                                 indication = ripple(color = Color.White),
-                                onClick = { selectedTab = tab },
+                                onClick = {
+                                    selectedTab = tab
+                                    activePlaylistDetail = null // Reset playlist detail on tab change
+                                },
                             )
                             .padding(horizontal = 14.dp),
                         contentAlignment = Alignment.Center,
@@ -283,21 +324,24 @@ fun LibraryScreen(
                     DownloadedSection(
                         hasPermission = hasAudioPermission,
                         isLoading = isLoadingTracks,
-                        tracks = localTracks,
+                        tracks = sortedLocalTracks,
                         playerState = playerState,
+                        currentSortOption = currentSortOption,
                         onRequestPermission = { permissionLauncher.launch(permissionToRequest) },
-                        onTrackClick = { track -> onPlayQueue(localTracks, track) },
+                        onTrackClick = { track -> onPlayQueue(sortedLocalTracks, track) },
                         onPlayAll = {
-                            if (localTracks.isNotEmpty()) {
-                                onPlayQueue(localTracks, localTracks.first())
+                            if (sortedLocalTracks.isNotEmpty()) {
+                                onPlayQueue(sortedLocalTracks, sortedLocalTracks.first())
                             }
                         },
                         onShuffleAll = {
-                            if (localTracks.isNotEmpty()) {
-                                val shuffled = localTracks.shuffled()
+                            if (sortedLocalTracks.isNotEmpty()) {
+                                val shuffled = sortedLocalTracks.shuffled()
                                 onPlayQueue(shuffled, shuffled.first())
                             }
                         },
+                        onOpenSort = onOpenSortSheet,
+                        onMoreClick = onOpenTrackOptions,
                     )
                 }
 
@@ -306,6 +350,7 @@ fun LibraryScreen(
                         tracks = favoriteTracks,
                         playerState = playerState,
                         onTrackClick = { track -> onPlayQueue(favoriteTracks, track) },
+                        onMoreClick = onOpenTrackOptions,
                     )
                 }
 
@@ -322,12 +367,53 @@ fun LibraryScreen(
                 }
 
                 "Playlists" -> {
-                    PlaylistsSection(
-                        localTracksCount = localTracks.size,
-                        favoritesCount = favoriteTracks.size,
-                        onSelectDownloaded = { selectedTab = "Downloaded" },
-                        onSelectFavorites = { selectedTab = "Favorites" },
-                    )
+                    if (activePlaylistDetail != null) {
+                        // Detailed playlist view
+                        val playlist = activePlaylistDetail!!
+                        val playlistTracks = remember(playlist, localTracks) {
+                            localTracks.filter { playlist.trackIds.contains(it.id) || it.folderName == playlist.name }
+                        }
+
+                        PlaylistDetailSection(
+                            playlist = playlist,
+                            tracks = playlistTracks,
+                            playerState = playerState,
+                            onBack = { activePlaylistDetail = null },
+                            onTrackClick = { track -> onPlayQueue(playlistTracks, track) },
+                            onPlayAll = {
+                                if (playlistTracks.isNotEmpty()) {
+                                    onPlayQueue(playlistTracks, playlistTracks.first())
+                                }
+                            },
+                            onShuffleAll = {
+                                if (playlistTracks.isNotEmpty()) {
+                                    val shuffled = playlistTracks.shuffled()
+                                    onPlayQueue(shuffled, shuffled.first())
+                                }
+                            },
+                            onMoreClick = onOpenTrackOptions,
+                        )
+                    } else {
+                        // Playlists overview
+                        PlaylistsSection(
+                            folderPlaylists = folderPlaylists,
+                            customPlaylists = customPlaylists,
+                            localTracksCount = localTracks.size,
+                            favoritesCount = favoriteTracks.size,
+                            onSelectDownloaded = { selectedTab = "Downloaded" },
+                            onSelectFavorites = { selectedTab = "Favorites" },
+                            onSelectPlaylist = { playlist -> activePlaylistDetail = playlist },
+                            onCreatePlaylist = { name ->
+                                val created = libraryStorage.createPlaylist(name)
+                                customPlaylists = libraryStorage.getCustomPlaylists()
+                                activePlaylistDetail = created
+                            },
+                            onDeleteCustomPlaylist = { playlistId ->
+                                libraryStorage.deletePlaylist(playlistId)
+                                customPlaylists = libraryStorage.getCustomPlaylists()
+                            },
+                        )
+                    }
                 }
             }
         }
@@ -344,10 +430,13 @@ private fun DownloadedSection(
     isLoading: Boolean,
     tracks: List<Track>,
     playerState: PlayerState,
+    currentSortOption: TrackSortOption,
     onRequestPermission: () -> Unit,
     onTrackClick: (Track) -> Unit,
     onPlayAll: () -> Unit,
     onShuffleAll: () -> Unit,
+    onOpenSort: () -> Unit,
+    onMoreClick: (Track) -> Unit,
 ) {
     if (!hasPermission) {
         // Permission Request Banner
@@ -468,7 +557,7 @@ private fun DownloadedSection(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(bottom = 180.dp),
         ) {
-            // Quick action controls row: Track count + Play All + Shuffle All
+            // Action Controls Header: Track Count + Play All + Shuffle All + Sort Funnel
             item {
                 Row(
                     modifier = Modifier
@@ -477,14 +566,24 @@ private fun DownloadedSection(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text(
-                        text = "${tracks.size} Songs on Device",
-                        color = TextSecondary,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Medium,
-                    )
+                    Column {
+                        Text(
+                            text = "${tracks.size} Songs on Device",
+                            color = TextPrimary,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        Text(
+                            text = "Sorted by ${currentSortOption.displayName}",
+                            color = TextMuted,
+                            fontSize = 11.sp,
+                        )
+                    }
 
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
                         // Play All Button
                         Box(
                             modifier = Modifier
@@ -542,6 +641,23 @@ private fun DownloadedSection(
                                 )
                             }
                         }
+
+                        // Sort By Funnel Button
+                        Box(
+                            modifier = Modifier
+                                .size(32.dp)
+                                .clip(CircleShape)
+                                .background(GlassPill)
+                                .clickable(onClick = onOpenSort),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            LucideIcon(
+                                iconRes = LucideIcons.Filter,
+                                contentDescription = "Sort options",
+                                size = 15.dp,
+                                tint = Color.White,
+                            )
+                        }
                     }
                 }
             }
@@ -553,7 +669,7 @@ private fun DownloadedSection(
                     isActive = track.id == playerState.currentTrack?.id,
                     isPlaying = playerState.isPlaying,
                     onClick = { onTrackClick(track) },
-                    onMoreClick = { /* Options */ },
+                    onMoreClick = { onMoreClick(track) },
                 )
             }
         }
@@ -569,6 +685,7 @@ private fun FavoritesSection(
     tracks: List<Track>,
     playerState: PlayerState,
     onTrackClick: (Track) -> Unit,
+    onMoreClick: (Track) -> Unit,
 ) {
     if (tracks.isEmpty()) {
         Box(
@@ -629,7 +746,7 @@ private fun FavoritesSection(
                     isActive = track.id == playerState.currentTrack?.id,
                     isPlaying = playerState.isPlaying,
                     onClick = { onTrackClick(track) },
-                    onMoreClick = { /* Options */ },
+                    onMoreClick = { onMoreClick(track) },
                 )
             }
         }
@@ -637,7 +754,7 @@ private fun FavoritesSection(
 }
 
 // ==============================================================================
-// 3. HISTORY SECTION (WITH OFFLINE VS ONLINE BADGES & TIMESTAMPS)
+// 3. HISTORY SECTION
 // ==============================================================================
 
 @Composable
@@ -698,7 +815,6 @@ private fun HistorySection(
                         fontWeight = FontWeight.Medium,
                     )
 
-                    // Clear History Button
                     Box(
                         modifier = Modifier
                             .height(28.dp)
@@ -730,13 +846,6 @@ private fun HistorySection(
     }
 }
 
-/**
- * Renders an entry in the user's playback history with:
- * 1. Artwork / Music Icon.
- * 2. Title & Artist.
- * 3. Relative timestamp ("Just now", "5m ago").
- * 4. Crisp Source Tag: OFFLINE (Emerald/Cyan glow) or ONLINE (Muted glass).
- */
 @Composable
 private fun HistoryRowItem(
     historyItem: HistoryItem,
@@ -754,7 +863,6 @@ private fun HistoryRowItem(
             .padding(horizontal = 20.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        // Thumbnail or placeholder
         Box(
             modifier = Modifier
                 .size(46.dp)
@@ -772,7 +880,6 @@ private fun HistoryRowItem(
 
         Spacer(modifier = Modifier.width(14.dp))
 
-        // Title and Artist
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = track.title,
@@ -811,7 +918,6 @@ private fun HistoryRowItem(
 
         Spacer(modifier = Modifier.width(8.dp))
 
-        // Source Tag Badge (OFFLINE vs ONLINE)
         Box(
             modifier = Modifier
                 .clip(RoundedCornerShape(6.dp))
@@ -830,25 +936,148 @@ private fun HistoryRowItem(
 }
 
 // ==============================================================================
-// 4. PLAYLISTS SECTION
+// 4. PLAYLISTS SECTION (FOLDER PLAYLISTS + CUSTOM METADATA PLAYLISTS)
 // ==============================================================================
 
 @Composable
 private fun PlaylistsSection(
+    folderPlaylists: List<Playlist>,
+    customPlaylists: List<Playlist>,
     localTracksCount: Int,
     favoritesCount: Int,
     onSelectDownloaded: () -> Unit,
     onSelectFavorites: () -> Unit,
+    onSelectPlaylist: (Playlist) -> Unit,
+    onCreatePlaylist: (String) -> Unit,
+    onDeleteCustomPlaylist: (String) -> Unit,
 ) {
+    var isCreatingDialogVisible by remember { mutableStateOf(false) }
+    var newPlaylistNameInput by remember { mutableStateOf("") }
+
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
+        // "+ Create Playlist" Action Bar
+        item {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "All Playlists",
+                    color = TextPrimary,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                )
+
+                Box(
+                    modifier = Modifier
+                        .height(32.dp)
+                        .clip(CircleShape)
+                        .background(Color.White)
+                        .clickable { isCreatingDialogVisible = true }
+                        .padding(horizontal = 14.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        LucideIcon(
+                            iconRes = LucideIcons.FolderPlus,
+                            contentDescription = null,
+                            size = 14.dp,
+                            tint = Color.Black,
+                        )
+                        Text(
+                            text = "New Playlist",
+                            color = Color.Black,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                        )
+                    }
+                }
+            }
+        }
+
+        // Inline Create Input if triggered
+        if (isCreatingDialogVisible) {
+            item {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(GlassSurfaceElevated)
+                        .padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Text(
+                        text = "Name your new playlist",
+                        color = TextPrimary,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    OutlinedTextField(
+                        value = newPlaylistNameInput,
+                        onValueChange = { newPlaylistNameInput = it },
+                        placeholder = { Text("e.g., Chill Beats", color = TextMuted) },
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Color.White,
+                            unfocusedBorderColor = Color.White.copy(alpha = 0.2f),
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White,
+                        ),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End,
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .height(32.dp)
+                                .clip(CircleShape)
+                                .background(GlassPill)
+                                .clickable { isCreatingDialogVisible = false }
+                                .padding(horizontal = 12.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text("Cancel", color = TextSecondary, fontSize = 12.sp)
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Box(
+                            modifier = Modifier
+                                .height(32.dp)
+                                .clip(CircleShape)
+                                .background(Color.White)
+                                .clickable {
+                                    if (newPlaylistNameInput.isNotBlank()) {
+                                        onCreatePlaylist(newPlaylistNameInput.trim())
+                                        newPlaylistNameInput = ""
+                                        isCreatingDialogVisible = false
+                                    }
+                                }
+                                .padding(horizontal = 14.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text("Create", color = Color.Black, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+        }
+
+        // Quick Smart Playlists (Downloaded & Favorites)
         item {
             PlaylistTile(
                 title = "Downloaded Songs",
-                subtitle = "$localTracksCount songs available offline",
+                subtitle = "$localTracksCount tracks from your device",
                 iconRes = LucideIcons.Folder,
                 onClick = onSelectDownloaded,
             )
@@ -857,10 +1086,55 @@ private fun PlaylistsSection(
         item {
             PlaylistTile(
                 title = "Liked Songs",
-                subtitle = "$favoritesCount tracks favorited",
+                subtitle = "$favoritesCount favorited tracks",
                 iconRes = LucideIcons.Heart,
                 onClick = onSelectFavorites,
             )
+        }
+
+        // Section: Custom Playlists (Metadata)
+        if (customPlaylists.isNotEmpty()) {
+            item {
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = "Custom Playlists (${customPlaylists.size})",
+                    color = TextSecondary,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+
+            items(customPlaylists, key = { it.id }) { p ->
+                PlaylistTile(
+                    title = p.name,
+                    subtitle = "${p.trackIds.size} songs",
+                    iconRes = LucideIcons.Folder,
+                    onClick = { onSelectPlaylist(p) },
+                    onDelete = { onDeleteCustomPlaylist(p.id) },
+                )
+            }
+        }
+
+        // Section: Folder Playlists (Backward Compatibility)
+        if (folderPlaylists.isNotEmpty()) {
+            item {
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = "Storage Folders as Playlists (${folderPlaylists.size})",
+                    color = TextSecondary,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+
+            items(folderPlaylists, key = { it.id }) { p ->
+                PlaylistTile(
+                    title = p.name,
+                    subtitle = "${p.trackIds.size} songs in device folder",
+                    iconRes = LucideIcons.Folder,
+                    onClick = { onSelectPlaylist(p) },
+                )
+            }
         }
     }
 }
@@ -871,6 +1145,7 @@ private fun PlaylistTile(
     subtitle: String,
     iconRes: Int,
     onClick: () -> Unit,
+    onDelete: (() -> Unit)? = null,
 ) {
     Row(
         modifier = Modifier
@@ -904,21 +1179,205 @@ private fun PlaylistTile(
                 color = TextPrimary,
                 fontSize = 15.sp,
                 fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
             Spacer(modifier = Modifier.height(2.dp))
             Text(
                 text = subtitle,
                 color = TextSecondary,
                 fontSize = 12.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
         }
 
-        LucideIcon(
-            iconRes = LucideIcons.ArrowRight,
-            contentDescription = null,
-            size = 18.dp,
-            tint = TextMuted,
-        )
+        if (onDelete != null) {
+            LucideIconButton(
+                iconRes = LucideIcons.Trash,
+                contentDescription = "Delete playlist",
+                onClick = onDelete,
+                iconSize = 16.dp,
+                buttonSize = 36.dp,
+                tint = TextMuted,
+            )
+        } else {
+            LucideIcon(
+                iconRes = LucideIcons.ArrowRight,
+                contentDescription = null,
+                size = 18.dp,
+                tint = TextMuted,
+            )
+        }
+    }
+}
+
+// ==============================================================================
+// 5. PLAYLIST DETAIL SCREEN (VIEWING TRACKS INSIDE A PLAYLIST)
+// ==============================================================================
+
+@Composable
+private fun PlaylistDetailSection(
+    playlist: Playlist,
+    tracks: List<Track>,
+    playerState: PlayerState,
+    onBack: () -> Unit,
+    onTrackClick: (Track) -> Unit,
+    onPlayAll: () -> Unit,
+    onShuffleAll: () -> Unit,
+    onMoreClick: (Track) -> Unit,
+) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(bottom = 180.dp),
+    ) {
+        item {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 8.dp),
+            ) {
+                // Top row with Back button
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    LucideIconButton(
+                        iconRes = LucideIcons.ArrowLeft,
+                        contentDescription = "Back to playlists",
+                        onClick = onBack,
+                        iconSize = 22.dp,
+                        buttonSize = 40.dp,
+                        tint = Color.White,
+                    )
+
+                    Column {
+                        Text(
+                            text = playlist.name,
+                            color = TextPrimary,
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Text(
+                            text = if (playlist.isFolderPlaylist) "Folder Playlist • ${tracks.size} tracks" else "Custom Playlist • ${tracks.size} tracks",
+                            color = TextSecondary,
+                            fontSize = 12.sp,
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // Play All & Shuffle Buttons
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .height(34.dp)
+                            .clip(CircleShape)
+                            .background(Color.White)
+                            .clickable(onClick = onPlayAll)
+                            .padding(horizontal = 14.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            LucideIcon(
+                                iconRes = LucideIcons.Play,
+                                contentDescription = null,
+                                size = 14.dp,
+                                tint = Color.Black,
+                            )
+                            Text("Play All", color = Color.Black, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .height(34.dp)
+                            .clip(CircleShape)
+                            .background(GlassPill)
+                            .clickable(onClick = onShuffleAll)
+                            .padding(horizontal = 14.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            LucideIcon(
+                                iconRes = LucideIcons.Shuffle,
+                                contentDescription = null,
+                                size = 14.dp,
+                                tint = Color.White,
+                            )
+                            Text("Shuffle", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+            }
+        }
+
+        if (tracks.isEmpty()) {
+            item {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(32.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = "This playlist has no songs yet. Use the 3 dots menu on any song to add tracks here!",
+                        color = TextMuted,
+                        fontSize = 13.sp,
+                        textAlign = TextAlign.Center,
+                    )
+                }
+            }
+        } else {
+            items(tracks, key = { it.id }) { track ->
+                TrackRowItem(
+                    track = track,
+                    isActive = track.id == playerState.currentTrack?.id,
+                    isPlaying = playerState.isPlaying,
+                    onClick = { onTrackClick(track) },
+                    onMoreClick = { onMoreClick(track) },
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Fires native Android share sheet for a song.
+ */
+fun shareTrack(context: Context, track: Track) {
+    try {
+        val shareIntent = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_SUBJECT, track.title)
+            putExtra(Intent.EXTRA_TEXT, "Listening to \"${track.title}\" by ${track.artist} on Lunify!")
+            if (track.contentUri.isNotBlank()) {
+                val uri = Uri.parse(track.contentUri)
+                putExtra(Intent.EXTRA_STREAM, uri)
+                type = "audio/*"
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+        }
+        val chooser = Intent.createChooser(shareIntent, "Share Track")
+        chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        context.startActivity(chooser)
+    } catch (e: Exception) {
+        e.printStackTrace()
     }
 }
 

@@ -270,6 +270,30 @@ class AudioPlayerManager(
     }
 
     /**
+     * Inserts a track immediately after the currently playing song in the queue,
+     * so it will be the very next track played!
+     *
+     * @param track The song to play next.
+     */
+    fun insertNext(track: Track) {
+        val currentQueue = _playerState.value.queue.toMutableList()
+        val insertIndex = (_playerState.value.currentIndex + 1).coerceIn(0, currentQueue.size)
+        currentQueue.add(insertIndex, track)
+        _playerState.update { it.copy(queue = currentQueue) }
+    }
+
+    /**
+     * Appends a track to the end of the active queue.
+     *
+     * @param track The song to append.
+     */
+    fun addToQueue(track: Track) {
+        val currentQueue = _playerState.value.queue.toMutableList()
+        currentQueue.add(track)
+        _playerState.update { it.copy(queue = currentQueue) }
+    }
+
+    /**
      * Handles the previous button action according to product requirements:
      *
      * RULE:

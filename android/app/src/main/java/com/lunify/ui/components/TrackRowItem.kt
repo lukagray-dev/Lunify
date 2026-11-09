@@ -156,7 +156,7 @@ fun TrackRowItem(
         // Options or action button
         if (onMoreClick != null) {
             LucideIconButton(
-                iconRes = LucideIcons.Copy,
+                iconRes = LucideIcons.MoreVertical,
                 contentDescription = "Track options",
                 onClick = onMoreClick,
                 iconSize = 18.dp,

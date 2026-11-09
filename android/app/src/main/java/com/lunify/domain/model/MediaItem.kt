@@ -41,6 +41,10 @@ data class Track(
     val isFavorite: Boolean = false,
     val contentUri: String = "",
     val sizeBytes: Long = 0L,
+    val filePath: String = "",
+    val folderName: String = "",
+    val dateAdded: Long = 0L,
+    val playCount: Int = 0,
 ) {
     /**
      * Formats duration milliseconds into "m:ss" format for clean display.
@@ -57,6 +61,40 @@ data class Track(
         return "%d:%02d".format(minutes, seconds)
     }
 }
+
+/**
+ * Sorting options for local downloaded tracks:
+ * - NAME: Alphabetical A to Z.
+ * - TIME_CREATED: Newest additions first.
+ * - TIMES_PLAYED: Most frequently played tracks first.
+ * - DURATION: Longest songs to shortest songs.
+ */
+enum class TrackSortOption(val displayName: String) {
+    NAME("Name"),
+    TIME_CREATED("Time created"),
+    TIMES_PLAYED("Times played"),
+    DURATION("Duration"),
+}
+
+/**
+ * Represents a music playlist, either a user-created metadata playlist
+ * or a backward-compatible folder playlist created from device storage folders.
+ *
+ * @property id Unique playlist ID (UUID or folder hash).
+ * @property name Display name (e.g., "Chill Vibes" or "Download").
+ * @property trackIds Ordered list of track IDs contained in this playlist.
+ * @property isFolderPlaylist Whether this playlist is derived from an actual storage folder.
+ * @property folderPath Filesystem path if this is a folder playlist.
+ * @property createdAt Timestamp when this playlist was created or discovered.
+ */
+data class Playlist(
+    val id: String,
+    val name: String,
+    val trackIds: List<String> = emptyList(),
+    val isFolderPlaylist: Boolean = false,
+    val folderPath: String = "",
+    val createdAt: Long = System.currentTimeMillis(),
+)
 
 /**
  * Indicates where a song was played from, so we can tag history items

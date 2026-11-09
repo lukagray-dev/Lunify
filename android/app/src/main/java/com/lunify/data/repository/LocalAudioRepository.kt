@@ -5,7 +5,10 @@ import android.content.ContentUris
 import android.content.Context
 import android.net.Uri
 import android.provider.MediaStore
+import com.lunify.domain.model.Playlist
 import com.lunify.domain.model.Track
+import com.lunify.domain.model.TrackSortOption
+import java.io.File
 import java.util.Locale
 
 /**
@@ -22,17 +25,15 @@ import java.util.Locale
  * files to their device, or has music stored on their SD card or internal storage,
  * Android's media scanner indexes them.
  *
- * We query that index using Android's `ContentResolver`. This gives us instant,
- * high-performance access to all music files without having to slowly crawl
- * the filesystem folder by folder!
- *
  * KEY RESPONSIBILITIES:
  * 1. Querying music files: Pulling id, title, artist, album, duration, file size,
- *    and album cover art.
- * 2. Filtering noise: Filtering out short notification sounds or system sound effects
- *    (e.g., songs shorter than 5 seconds or non-music files).
- * 3. Calculating storage metrics: Summing up the exact byte size of all music
- *    tracks to drive the real storage usage indicator on the Library screen.
+ *    album cover art, filesystem path, folder name, and creation timestamp.
+ * 2. Grouping folders as playlists: Automatically recognizing folders containing
+ *    music (e.g. "Download", "Music", "Albums") and presenting them as backward-
+ *    compatible playlists without modifying or copying files!
+ * 3. Sorting engine: Supporting sorting by Name, Time created, Times played, and Duration.
+ * 4. File Deletion: Real deletion of offline tracks from device storage & MediaStore.
+ * 5. Calculating storage metrics: Summing up exact byte sizes of music tracks.
  * ==============================================================================
  */
 class LocalAudioRepository(private val context: Context) {
@@ -45,10 +46,8 @@ class LocalAudioRepository(private val context: Context) {
     fun getLocalAudioTracks(): List<Track> {
         val tracksList = mutableListOf<Track>()
 
-        // The URI pointing to external audio on the device
         val audioUri: Uri = MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
 
-        // The specific columns we want Android to return for each audio file
         val projection = arrayOf(
             MediaStore.Audio.Media._ID,
             MediaStore.Audio.Media.TITLE,
@@ -57,12 +56,12 @@ class LocalAudioRepository(private val context: Context) {
             MediaStore.Audio.Media.DURATION,
             MediaStore.Audio.Media.SIZE,
             MediaStore.Audio.Media.ALBUM_ID,
+            MediaStore.Audio.Media.DATA,
+            MediaStore.Audio.Media.DATE_ADDED,
         )
 
-        // Filter out ringtones, notifications, and audio clips shorter than 5 seconds (5000 ms)
+        // Filter out clips shorter than 5 seconds (5000 ms) and non-music audio
         val selection = "${MediaStore.Audio.Media.IS_MUSIC} != 0 AND ${MediaStore.Audio.Media.DURATION} >= 5000"
-
-        // Sort alphabetically by song title ignoring case
         val sortOrder = "${MediaStore.Audio.Media.TITLE} COLLATE NOCASE ASC"
 
         val contentResolver: ContentResolver = context.contentResolver
@@ -75,7 +74,6 @@ class LocalAudioRepository(private val context: Context) {
                 null,
                 sortOrder
             )?.use { cursor ->
-                // Cache column indices for optimal cursor reading performance
                 val idColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
                 val titleColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
                 val artistColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
@@ -83,6 +81,8 @@ class LocalAudioRepository(private val context: Context) {
                 val durationColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
                 val sizeColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.SIZE)
                 val albumIdColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM_ID)
+                val dataColumn = cursor.getColumnIndex(MediaStore.Audio.Media.DATA)
+                val dateAddedColumn = cursor.getColumnIndex(MediaStore.Audio.Media.DATE_ADDED)
 
                 while (cursor.moveToNext()) {
                     val id = cursor.getLong(idColumn)
@@ -92,8 +92,9 @@ class LocalAudioRepository(private val context: Context) {
                     val durationMs = cursor.getLong(durationColumn)
                     val sizeBytes = cursor.getLong(sizeColumn)
                     val albumId = cursor.getLong(albumIdColumn)
+                    val rawPath = if (dataColumn >= 0) cursor.getString(dataColumn) ?: "" else ""
+                    val dateAdded = if (dateAddedColumn >= 0) cursor.getLong(dateAddedColumn) * 1000L else 0L
 
-                    // Clean up default fallback strings from Android MediaStore
                     val cleanArtist = if (rawArtist == "<unknown>" || rawArtist.isBlank()) {
                         "Unknown Artist"
                     } else {
@@ -104,6 +105,18 @@ class LocalAudioRepository(private val context: Context) {
                         ""
                     } else {
                         rawAlbum
+                    }
+
+                    // Extract parent folder name for folder playlists
+                    val folderName = if (rawPath.isNotBlank()) {
+                        try {
+                            val parent = File(rawPath).parentFile
+                            parent?.name?.ifBlank { "Music" } ?: "Music"
+                        } catch (e: Exception) {
+                            "Music"
+                        }
+                    } else {
+                        "Music"
                     }
 
                     // Construct the playback URI (content://media/external/audio/media/<id>)
@@ -128,13 +141,15 @@ class LocalAudioRepository(private val context: Context) {
                         isFavorite = false,
                         contentUri = trackUri.toString(),
                         sizeBytes = sizeBytes,
+                        filePath = rawPath,
+                        folderName = folderName,
+                        dateAdded = dateAdded,
                     )
 
                     tracksList.add(track)
                 }
             }
         } catch (e: Exception) {
-            // Log error or gracefully handle security exceptions if permission was revoked
             e.printStackTrace()
         }
 
@@ -142,20 +157,101 @@ class LocalAudioRepository(private val context: Context) {
     }
 
     /**
-     * Calculates the total storage size in bytes occupied by all given tracks.
+     * Groups local tracks into backward-compatible folder playlists based on the
+     * directories where music files reside on device storage.
      *
-     * @param tracks The list of tracks to sum up.
-     * @return Total bytes as a Long.
+     * @param tracks Scanned list of local tracks.
+     * @return List of [Playlist] representing folders found.
      */
-    fun calculateTotalStorageBytes(tracks: List<Track>): Long {
-        return tracks.sumOf { it.sizeBytes }
+    fun getFolderPlaylists(tracks: List<Track>): List<Playlist> = Companion.getFolderPlaylists(tracks)
+
+    /**
+     * Sorts tracks according to the requested [TrackSortOption].
+     */
+    fun sortTracks(tracks: List<Track>, sortOption: TrackSortOption): List<Track> = Companion.sortTracks(tracks, sortOption)
+
+    /**
+     * Deletes an audio track permanently from the device storage and MediaStore.
+     *
+     * @param track The track to delete.
+     * @return True if deleted successfully, false otherwise.
+     */
+    fun deleteTrack(track: Track): Boolean {
+        var isDeleted = false
+
+        // 1. Delete via ContentResolver (MediaStore)
+        if (track.contentUri.isNotBlank()) {
+            try {
+                val uri = Uri.parse(track.contentUri)
+                val rows = context.contentResolver.delete(uri, null, null)
+                if (rows > 0) isDeleted = true
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+
+        // 2. Direct file fallback if file exists on disk
+        if (track.filePath.isNotBlank()) {
+            try {
+                val file = File(track.filePath)
+                if (file.exists() && file.delete()) {
+                    isDeleted = true
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+
+        return isDeleted
     }
+
+    /**
+     * Calculates the total storage size in bytes occupied by all given tracks.
+     */
+    fun calculateTotalStorageBytes(tracks: List<Track>): Long = Companion.calculateTotalStorageBytes(tracks)
 
     companion object {
         /**
-         * Converts milliseconds into a friendly "m:ss" time string.
-         * Example: 212000L -> "3:32"
+         * Groups local tracks into folder playlists based on directory path.
          */
+        fun getFolderPlaylists(tracks: List<Track>): List<Playlist> {
+            val folderGroups = tracks.groupBy { it.folderName }
+
+            return folderGroups.map { (folderName, tracksInFolder) ->
+                val firstFilePath = tracksInFolder.firstOrNull()?.filePath ?: ""
+                val folderPath = try {
+                    File(firstFilePath).parent ?: folderName
+                } catch (e: Exception) {
+                    folderName
+                }
+
+                Playlist(
+                    id = "folder_${folderName.lowercase(Locale.ROOT).replace(" ", "_")}",
+                    name = folderName,
+                    trackIds = tracksInFolder.map { it.id },
+                    isFolderPlaylist = true,
+                    folderPath = folderPath,
+                    createdAt = tracksInFolder.maxOfOrNull { it.dateAdded } ?: System.currentTimeMillis(),
+                )
+            }.sortedBy { it.name.lowercase(Locale.ROOT) }
+        }
+
+        /**
+         * Sorts tracks according to the requested [TrackSortOption].
+         */
+        fun sortTracks(tracks: List<Track>, sortOption: TrackSortOption): List<Track> {
+            return when (sortOption) {
+                TrackSortOption.NAME -> tracks.sortedBy { it.title.lowercase(Locale.ROOT) }
+                TrackSortOption.TIME_CREATED -> tracks.sortedByDescending { it.dateAdded }
+                TrackSortOption.TIMES_PLAYED -> tracks.sortedByDescending { it.playCount }
+                TrackSortOption.DURATION -> tracks.sortedByDescending { it.durationMs }
+            }
+        }
+
+        fun calculateTotalStorageBytes(tracks: List<Track>): Long {
+            return tracks.sumOf { it.sizeBytes }
+        }
+
         fun formatDuration(ms: Long): String {
             if (ms <= 0L) return "0:00"
             val totalSeconds = ms / 1000
@@ -164,14 +260,6 @@ class LocalAudioRepository(private val context: Context) {
             return "%d:%02d".format(Locale.US, minutes, seconds)
         }
 
-        /**
-         * Converts raw byte count into human-readable storage metrics for the UI badge.
-         *
-         * Examples:
-         * - 512_000L -> "500 KB Used"
-         * - 150_000_000L -> "143.0 MB Used"
-         * - 1_500_000_000L -> "1.4 GB Used"
-         */
         fun formatStorageSize(bytes: Long): String {
             if (bytes <= 0L) return "0 MB Used"
 

@@ -78,6 +78,7 @@ fun HomeScreen(
     onAlbumSelect: (Album) -> Unit,
     onOpenSettings: () -> Unit,
     onOpenDuo: () -> Unit,
+    onOpenTrackOptions: (Track) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     var selectedMoodId by remember { mutableStateOf("all") }
@@ -239,7 +240,7 @@ fun HomeScreen(
                     activeTrackId = playerState.currentTrack?.id,
                     isPlaying = playerState.isPlaying,
                     onTrackClick = onTrackSelect,
-                    onMoreClick = { /* Track options sheet */ },
+                    onMoreClick = onOpenTrackOptions,
                 )
                 Spacer(modifier = Modifier.height(28.dp))
             }

@@ -1,5 +1,6 @@
 package com.lunify.ui
 
+import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -27,14 +28,21 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.compose.ui.platform.LocalContext
 import com.lunify.data.local.LibraryStorage
 import com.lunify.data.repository.LocalAudioRepository
+import com.lunify.data.repository.LyricsRepository
 import com.lunify.domain.model.LyricLine
 import com.lunify.domain.model.SyncedLyrics
 import com.lunify.domain.model.Track
+import com.lunify.domain.model.TrackSortOption
 import com.lunify.player.AudioPlayerManager
+import com.lunify.ui.components.AddToPlaylistSheet
 import com.lunify.ui.components.AppBottomNavigationBar
+import com.lunify.ui.components.SortOptionsSheet
+import com.lunify.ui.components.TrackOptionsSheet
 import com.lunify.ui.duo.DuoSheet
+import com.lunify.ui.library.shareTrack
 import com.lunify.ui.navigation.AppNavigationGraph
 import com.lunify.ui.navigation.NavRoute
 import com.lunify.ui.player.FullscreenPlayer
@@ -72,6 +80,8 @@ fun LunifyApp(
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route ?: NavRoute.HOME
 
+    val context = LocalContext.current
+
     // Sample initial demo queue for instant exploration if player queue is empty
     val initialQueue = remember {
         listOf(
@@ -82,29 +92,15 @@ fun LunifyApp(
         )
     }
 
-    // Realistic Synced Lyrics Sample for "Midnight City"
-    val sampleLyrics = remember {
-        SyncedLyrics(
-            trackId = "t1",
-            lines = listOf(
-                LyricLine(0L, "(Instrumental synth intro)"),
-                LyricLine(12000L, "Waiting in a car"),
-                LyricLine(16000L, "Waiting for a ride in the dark"),
-                LyricLine(21000L, "The night city grows"),
-                LyricLine(25000L, "Look and see her eyes, they glow"),
-                LyricLine(31000L, "Waiting in a car"),
-                LyricLine(35000L, "Waiting for a ride in the dark"),
-                LyricLine(40000L, "The night city grows"),
-                LyricLine(45000L, "Look and see her eyes, they glow"),
-                LyricLine(52000L, "The city is my church"),
-                LyricLine(57000L, "It wraps me in the sparkling twilight"),
-                LyricLine(65000L, "(Saxophone solo)"),
-            ),
-        )
-    }
-
     // Reactive single source of truth for playback state
     val playerState by audioPlayerManager.playerState.collectAsState()
+
+    // Real lyrics lookup from companion .lrc or embedded tags (null if track has no lyrics)
+    val currentLyrics = remember(playerState.currentTrack) {
+        playerState.currentTrack?.let { track ->
+            LyricsRepository.getLyricsForTrack(track, context)
+        }
+    }
 
     // Initialize queue with initial tracks if empty
     LaunchedEffect(Unit) {
@@ -118,6 +114,15 @@ fun LunifyApp(
     var showQueue by remember { mutableStateOf(false) }
     var showDuoSheet by remember { mutableStateOf(false) }
     var isMiniPlayerDismissed by remember { mutableStateOf(false) }
+
+    // Global Modal Sheets State (always hoisted above the bottom dock!)
+    var trackForOptions by remember { mutableStateOf<Track?>(null) }
+    var trackForPlaylist by remember { mutableStateOf<Track?>(null) }
+    var isSortSheetOpen by remember { mutableStateOf(false) }
+    var currentSortOption by remember { mutableStateOf(TrackSortOption.NAME) }
+    var libraryRefreshTrigger by remember { mutableStateOf(0) }
+
+    val hasActiveModalSheet = showQueue || showDuoSheet || trackForOptions != null || trackForPlaylist != null || isSortSheetOpen
 
     Box(
         modifier = modifier
@@ -145,6 +150,11 @@ fun LunifyApp(
                 }
             },
             onOpenDuo = { showDuoSheet = true },
+            onOpenTrackOptions = { track -> trackForOptions = track },
+            currentSortOption = currentSortOption,
+            onOpenSortSheet = { isSortSheetOpen = true },
+            libraryRefreshTrigger = libraryRefreshTrigger,
+            audioPlayerManager = audioPlayerManager,
             libraryStorage = libraryStorage,
             localAudioRepository = localAudioRepository,
         )
@@ -152,7 +162,7 @@ fun LunifyApp(
         // ----------------------------------------------------------------------
         // 2. Progressive Dissolve Scrim behind Bottom Dock
         // ----------------------------------------------------------------------
-        if (!isPlayerExpanded && !showQueue && !showDuoSheet) {
+        if (!isPlayerExpanded && !hasActiveModalSheet) {
             Box(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
@@ -173,7 +183,7 @@ fun LunifyApp(
         // ----------------------------------------------------------------------
         // 3. Floating Bottom Dock (MiniPlayer + Floating Bottom Bar)
         // ----------------------------------------------------------------------
-        if (!isPlayerExpanded && !showQueue && !showDuoSheet) {
+        if (!isPlayerExpanded && !hasActiveModalSheet) {
             Column(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
@@ -227,7 +237,7 @@ fun LunifyApp(
         ) {
             FullscreenPlayer(
                 playerState = playerState,
-                lyrics = sampleLyrics,
+                lyrics = currentLyrics,
                 onCollapse = { isPlayerExpanded = false },
                 onTogglePlayPause = { audioPlayerManager.togglePlayPause() },
                 onPrevious = { audioPlayerManager.playPrevious() },
@@ -247,8 +257,8 @@ fun LunifyApp(
             )
         }
 
-        // Dimmed modal backdrop for Queue or Duo sheet
-        if (showQueue || showDuoSheet) {
+        // Dimmed modal backdrop for any active modal sheet
+        if (hasActiveModalSheet) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -256,6 +266,9 @@ fun LunifyApp(
                     .clickable {
                         showQueue = false
                         showDuoSheet = false
+                        trackForOptions = null
+                        trackForPlaylist = null
+                        isSortSheetOpen = false
                     },
             )
         }
@@ -303,6 +316,110 @@ fun LunifyApp(
                 },
                 onClose = { showDuoSheet = false },
             )
+        }
+
+        // ----------------------------------------------------------------------
+        // 7. Sort Options Pop-up Sheet (Elevated ABOVE Bottom Tab Bar!)
+        // ----------------------------------------------------------------------
+        AnimatedVisibility(
+            visible = isSortSheetOpen,
+            enter = slideInVertically { it } + fadeIn(),
+            exit = slideOutVertically { it } + fadeOut(),
+            modifier = Modifier.align(Alignment.BottomCenter),
+        ) {
+            SortOptionsSheet(
+                activeSortOption = currentSortOption,
+                onSelectSortOption = { newOption ->
+                    currentSortOption = newOption
+                    isSortSheetOpen = false
+                },
+                onClose = { isSortSheetOpen = false },
+            )
+        }
+
+        // ----------------------------------------------------------------------
+        // 8. Track Options Pop-up Sheet (Elevated ABOVE Bottom Tab Bar!)
+        // ----------------------------------------------------------------------
+        AnimatedVisibility(
+            visible = trackForOptions != null,
+            enter = slideInVertically { it } + fadeIn(),
+            exit = slideOutVertically { it } + fadeOut(),
+            modifier = Modifier.align(Alignment.BottomCenter),
+        ) {
+            trackForOptions?.let { track ->
+                TrackOptionsSheet(
+                    track = track,
+                    isFavorite = libraryStorage.isFavorite(track.id),
+                    onToggleFavorite = {
+                        audioPlayerManager.toggleFavorite(track)
+                        trackForOptions = null
+                    },
+                    onDeleteOrDownload = {
+                        trackForOptions = null
+                        if (track.isDownloaded) {
+                            val deleted = localAudioRepository.deleteTrack(track)
+                            if (deleted) {
+                                Toast.makeText(context, "Deleted \"${track.title}\"", Toast.LENGTH_SHORT).show()
+                                libraryRefreshTrigger++
+                            } else {
+                                Toast.makeText(context, "Could not delete track", Toast.LENGTH_SHORT).show()
+                            }
+                        } else {
+                            Toast.makeText(context, "Downloaded \"${track.title}\"", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    onAddToPlaylist = {
+                        trackForPlaylist = track
+                        trackForOptions = null
+                    },
+                    onPlayNext = {
+                        audioPlayerManager.insertNext(track)
+                        Toast.makeText(context, "Playing next: \"${track.title}\"", Toast.LENGTH_SHORT).show()
+                        trackForOptions = null
+                    },
+                    onAddToQueue = {
+                        audioPlayerManager.addToQueue(track)
+                        Toast.makeText(context, "Added to queue: \"${track.title}\"", Toast.LENGTH_SHORT).show()
+                        trackForOptions = null
+                    },
+                    onShare = {
+                        trackForOptions = null
+                        shareTrack(context, track)
+                    },
+                    onClose = { trackForOptions = null },
+                )
+            }
+        }
+
+        // ----------------------------------------------------------------------
+        // 9. Add to Playlist Pop-up Sheet (Elevated ABOVE Bottom Tab Bar!)
+        // ----------------------------------------------------------------------
+        AnimatedVisibility(
+            visible = trackForPlaylist != null,
+            enter = slideInVertically { it } + fadeIn(),
+            exit = slideOutVertically { it } + fadeOut(),
+            modifier = Modifier.align(Alignment.BottomCenter),
+        ) {
+            trackForPlaylist?.let { track ->
+                AddToPlaylistSheet(
+                    track = track,
+                    playlists = libraryStorage.getCustomPlaylists(),
+                    onAddToPlaylist = { playlist ->
+                        libraryStorage.addTrackToPlaylist(playlist.id, track.id)
+                        Toast.makeText(context, "Added to \"${playlist.name}\"", Toast.LENGTH_SHORT).show()
+                        libraryRefreshTrigger++
+                        trackForPlaylist = null
+                    },
+                    onCreatePlaylist = { name ->
+                        val created = libraryStorage.createPlaylist(name)
+                        libraryStorage.addTrackToPlaylist(created.id, track.id)
+                        Toast.makeText(context, "Created & added to \"${created.name}\"", Toast.LENGTH_SHORT).show()
+                        libraryRefreshTrigger++
+                        trackForPlaylist = null
+                    },
+                    onClose = { trackForPlaylist = null },
+                )
+            }
         }
     }
 }

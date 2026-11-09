@@ -69,6 +69,10 @@ object LucideIcons {
     val ChevronDown = R.drawable.ic_lucide_chevron_down
 
     // Actions & Utilities
+    val MoreVertical = R.drawable.ic_lucide_more_vertical
+    val Filter = R.drawable.ic_lucide_filter
+    val Share = R.drawable.ic_lucide_share
+    val ListPlus = R.drawable.ic_lucide_list_plus
     val ArrowLeft = R.drawable.ic_lucide_arrow_left
     val ArrowRight = R.drawable.ic_lucide_arrow_right
     val Check = R.drawable.ic_lucide_check

@@ -74,6 +74,7 @@ import com.lunify.ui.theme.liquidGlass
 fun SearchScreen(
     playerState: PlayerState,
     onTrackSelect: (Track) -> Unit,
+    onOpenTrackOptions: (Track) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     var searchQuery by remember { mutableStateOf("") }
@@ -250,7 +251,7 @@ fun SearchScreen(
                             isActive = track.id == playerState.currentTrack?.id,
                             isPlaying = playerState.isPlaying,
                             onClick = { onTrackSelect(track) },
-                            onMoreClick = { /* Options */ },
+                            onMoreClick = { onOpenTrackOptions(track) },
                         )
                     }
                 }
