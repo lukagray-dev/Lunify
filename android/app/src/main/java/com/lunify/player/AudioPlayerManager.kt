@@ -226,7 +226,13 @@ class AudioPlayerManager(
      * @param newQueue Optional list of tracks forming the active queue/playlist.
      */
     fun playTrack(track: Track, newQueue: List<Track>? = null) {
-        val updatedQueue = newQueue ?: _playerState.value.queue.ifEmpty { listOf(track) }
+        val updatedQueue = if (newQueue != null && newQueue.isNotEmpty()) {
+            newQueue
+        } else if (_playerState.value.queue.any { it.id == track.id }) {
+            _playerState.value.queue
+        } else {
+            listOf(track)
+        }
         val index = updatedQueue.indexOfFirst { it.id == track.id }.let { if (it == -1) 0 else it }
 
         // Update favorite flag from persistent storage
@@ -300,20 +306,22 @@ class AudioPlayerManager(
     }
 
     /**
-     * If the queue is running low (<= 2 tracks), fetches related radio tracks from YouTube
-     * and seamlessly appends them to the queue for uninterrupted music listening.
+     * If the queue is near the end or only has 1-3 tracks, fetches related radio tracks
+     * from YouTube Music and seamlessly appends them to the queue for uninterrupted music listening.
      */
     private fun maybeExpandQueue(videoId: String) {
-        if (_playerState.value.queue.size <= 2) {
+        val state = _playerState.value
+        val shouldExpand = state.queue.size <= 3 || state.currentIndex >= state.queue.size - 2
+        if (shouldExpand) {
             scope.launch(Dispatchers.IO) {
                 val relatedResult = onlineRepository.getRelatedQueue(videoId)
                 val relatedTracks = relatedResult.getOrNull()
                 if (!relatedTracks.isNullOrEmpty()) {
                     withContext(Dispatchers.Main) {
-                        _playerState.update { state ->
-                            val existingIds = state.queue.map { it.id }.toSet()
+                        _playerState.update { current ->
+                            val existingIds = current.queue.map { it.id }.toSet()
                             val newTracks = relatedTracks.filter { it.id !in existingIds }
-                            state.copy(queue = state.queue + newTracks)
+                            current.copy(queue = current.queue + newTracks)
                         }
                     }
                 }

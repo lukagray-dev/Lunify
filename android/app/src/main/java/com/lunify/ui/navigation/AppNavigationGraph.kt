@@ -102,6 +102,7 @@ fun AppNavigationGraph(
             HomeScreen(
                 playerState = playerState,
                 onTrackSelect = onTrackSelect,
+                onPlayQueue = onPlayQueue,
                 onAlbumSelect = onAlbumSelect,
                 onOpenSettings = { navController.navigate(NavRoute.SETTINGS) },
                 onOpenDuo = onOpenDuo,
@@ -113,6 +114,7 @@ fun AppNavigationGraph(
             SearchScreen(
                 playerState = playerState,
                 onTrackSelect = onTrackSelect,
+                onPlayQueue = onPlayQueue,
                 onOpenTrackOptions = onOpenTrackOptions,
             )
         }

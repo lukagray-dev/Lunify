@@ -1,8 +1,16 @@
 package com.lunify.ui.player
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode as AnimRepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.ui.graphics.graphicsLayer
+import com.lunify.domain.model.PlayerStatus
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -344,20 +352,43 @@ fun FullscreenPlayer(
                 )
 
                 // Main Play/Pause Floating Circle (Pure White Circle with Black Icon)
+                // When audio is buffering, shows spinning loading indicator
+                val isBuffering = playerState.status == PlayerStatus.BUFFERING
+                val infiniteTransition = rememberInfiniteTransition(label = "full_loading_spinner")
+                val rotationAngle by infiniteTransition.animateFloat(
+                    initialValue = 0f,
+                    targetValue = 360f,
+                    animationSpec = infiniteRepeatable(
+                        animation = tween(durationMillis = 850, easing = LinearEasing),
+                        repeatMode = AnimRepeatMode.Restart,
+                    ),
+                    label = "full_spinner_rot",
+                )
+
                 Box(
                     modifier = Modifier
                         .size(68.dp)
                         .clip(CircleShape)
                         .background(Color.White)
-                        .clickable(onClick = onTogglePlayPause),
+                        .clickable(enabled = !isBuffering, onClick = onTogglePlayPause),
                     contentAlignment = Alignment.Center,
                 ) {
-                    LucideIcon(
-                        iconRes = if (playerState.isPlaying) LucideIcons.Pause else LucideIcons.Play,
-                        contentDescription = if (playerState.isPlaying) "Pause" else "Play",
-                        size = 32.dp,
-                        tint = Color.Black,
-                    )
+                    if (isBuffering) {
+                        LucideIcon(
+                            iconRes = LucideIcons.Loading,
+                            contentDescription = "Loading audio",
+                            size = 32.dp,
+                            tint = Color.Black,
+                            modifier = Modifier.graphicsLayer { rotationZ = rotationAngle },
+                        )
+                    } else {
+                        LucideIcon(
+                            iconRes = if (playerState.isPlaying) LucideIcons.Pause else LucideIcons.Play,
+                            contentDescription = if (playerState.isPlaying) "Pause" else "Play",
+                            size = 32.dp,
+                            tint = Color.Black,
+                        )
+                    }
                 }
 
                 // Skip Forward Button

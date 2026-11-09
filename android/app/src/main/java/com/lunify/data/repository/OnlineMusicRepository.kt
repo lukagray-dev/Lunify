@@ -3,6 +3,7 @@ package com.lunify.data.repository
 import com.lunify.data.remote.YouTubeExtractor
 import com.lunify.data.remote.YouTubeMusicClient
 import com.lunify.domain.model.Album
+import com.lunify.domain.model.Artist
 import com.lunify.domain.model.Track
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -66,6 +67,20 @@ class OnlineMusicRepository(
      */
     suspend fun getHomeTrending(): Result<List<Album>> = withContext(Dispatchers.IO) {
         client.getHomeTrendingAlbums()
+    }
+
+    /**
+     * Fetches real community and curated playlists from YouTube Music.
+     */
+    suspend fun getHomePlaylists(): Result<List<Album>> = withContext(Dispatchers.IO) {
+        client.getHomePlaylists()
+    }
+
+    /**
+     * Fetches real top artists from YouTube Music Charts.
+     */
+    suspend fun getTopArtists(): Result<List<Artist>> = withContext(Dispatchers.IO) {
+        client.getTopArtists()
     }
 
     /**

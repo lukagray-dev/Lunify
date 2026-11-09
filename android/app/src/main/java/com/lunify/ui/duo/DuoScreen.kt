@@ -90,15 +90,8 @@ fun DuoScreen(
     var connectedPeerId by remember { mutableStateOf("LN-3810") }
     var isCopied by remember { mutableStateOf(false) }
 
-    // Mock Shared Common Queue for Duo Session
-    val sharedTracks = remember {
-        listOf(
-            Track("d1", "Resonance", "HOME", "Odyssey", "3:32", 212000L),
-            Track("d2", "Midnight City", "M83", "Hurry Up", "4:04", 244000L),
-            Track("d3", "Starboy", "The Weeknd", "Starboy", "3:50", 230000L),
-            Track("d4", "Instant Crush", "Daft Punk", "Random Access", "5:37", 337000L),
-        )
-    }
+    // Real Shared Common Queue for Duo Session driven by playerState.queue
+    val sharedTracks = playerState.queue
 
     Box(
         modifier = modifier
@@ -454,18 +447,34 @@ fun DuoScreen(
 
                     Spacer(modifier = Modifier.height(10.dp))
 
-                    LazyColumn(
-                        modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(bottom = 180.dp),
-                    ) {
-                        items(sharedTracks) { track ->
-                            TrackRowItem(
-                                track = track,
-                                isActive = track.id == playerState.currentTrack?.id,
-                                isPlaying = playerState.isPlaying,
-                                onClick = { onTrackSelect(track) },
-                                onMoreClick = { /* Options */ },
+                    if (sharedTracks.isEmpty()) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 32.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                text = "Queue is empty. Play or search songs to listen together.",
+                                color = TextMuted,
+                                fontSize = 14.sp,
+                                textAlign = TextAlign.Center,
                             )
+                        }
+                    } else {
+                        LazyColumn(
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(bottom = 180.dp),
+                        ) {
+                            items(sharedTracks) { track ->
+                                TrackRowItem(
+                                    track = track,
+                                    isActive = track.id == playerState.currentTrack?.id,
+                                    isPlaying = playerState.isPlaying,
+                                    onClick = { onTrackSelect(track) },
+                                    onMoreClick = { /* Options */ },
+                                )
+                            }
                         }
                     }
                 }

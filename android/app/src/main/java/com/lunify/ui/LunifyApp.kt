@@ -84,16 +84,6 @@ fun LunifyApp(
 
     val context = LocalContext.current
 
-    // Sample initial demo queue for instant exploration if player queue is empty
-    val initialQueue = remember {
-        listOf(
-            Track("t1", "Midnight City", "M83", "Hurry Up, We're Dreaming", "4:04", 244000L),
-            Track("t2", "Starboy", "The Weeknd ft. Daft Punk", "Starboy", "3:50", 230000L),
-            Track("t3", "Instant Crush", "Daft Punk ft. Julian Casablancas", "Random Access Memories", "5:37", 337000L),
-            Track("t4", "Resonance", "HOME", "Odyssey", "3:32", 212000L),
-        )
-    }
-
     // Reactive single source of truth for playback state
     val playerState by audioPlayerManager.playerState.collectAsState()
 
@@ -116,13 +106,6 @@ fun LunifyApp(
             }
         } else {
             value = null
-        }
-    }
-
-    // Initialize queue with initial tracks if empty
-    LaunchedEffect(Unit) {
-        if (playerState.queue.isEmpty()) {
-            audioPlayerManager.setQueue(initialQueue, 0)
         }
     }
 

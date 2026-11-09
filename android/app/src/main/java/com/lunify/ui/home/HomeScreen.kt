@@ -34,6 +34,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.layout.ContentScale
+import coil.compose.AsyncImage
+import kotlinx.coroutines.launch
 import com.lunify.data.repository.OnlineMusicRepository
 import com.lunify.domain.model.Album
 import com.lunify.domain.model.Artist
@@ -80,66 +83,46 @@ fun HomeScreen(
     onAlbumSelect: (Album) -> Unit,
     onOpenSettings: () -> Unit,
     onOpenDuo: () -> Unit,
+    onPlayQueue: (List<Track>, Track) -> Unit = { _, t -> onTrackSelect(t) },
     onOpenTrackOptions: (Track) -> Unit = {},
     onlineRepository: OnlineMusicRepository = remember { OnlineMusicRepository() },
     modifier: Modifier = Modifier,
 ) {
     var selectedMoodId by remember { mutableStateOf("all") }
 
-    // Fallback Mock Sample Data
-    val defaultQuickPicks = remember {
-        listOf(
-            Track("I94fhjQ-U30", "Tum Se Hi", "Pritam, Mohit Chauhan", "Jab We Met", "5:23", 323000L),
-            Track("xTvyyoF_LZY", "Shape of You", "Ed Sheeran", "÷ (Divide)", "3:54", 234000L),
-            Track("O3-6zB3kg8M", "Brown Rang", "Yo Yo Honey Singh", "International Villager", "2:59", 179000L),
-            Track("t1", "Midnight City", "M83", "Hurry Up, We're Dreaming", "4:04", 244000L),
-        )
-    }
+    // Dynamic state populated strictly from real YouTube Music InnerTube responses
+    var quickPicks by remember { mutableStateOf<List<Track>>(emptyList()) }
+    var trendingAlbums by remember { mutableStateOf<List<Album>>(emptyList()) }
+    var featuredPlaylists by remember { mutableStateOf<List<Album>>(emptyList()) }
+    var topArtists by remember { mutableStateOf<List<Artist>>(emptyList()) }
 
-    val defaultTrending = remember {
-        listOf(
-            Album("a1", "After Hours", "The Weeknd", "2020", "", 14),
-            Album("a2", "Random Access Memories", "Daft Punk", "2013", "", 13),
-            Album("a3", "Currents", "Tame Impala", "2015", "", 13),
-            Album("a4", "Hurry Up, We're Dreaming", "M83", "2011", "", 22),
-        )
-    }
+    var isLoadingQuickPicks by remember { mutableStateOf(true) }
+    var isLoadingTrending by remember { mutableStateOf(true) }
+    var isLoadingPlaylists by remember { mutableStateOf(true) }
+    var isLoadingArtists by remember { mutableStateOf(true) }
 
-    var quickPicks by remember { mutableStateOf<List<Track>>(defaultQuickPicks) }
-    var trendingAlbums by remember { mutableStateOf<List<Album>>(defaultTrending) }
-
-    // Fetch live YouTube Music home feed data in background
+    // Fetch live YouTube Music home feed data asynchronously in parallel
     LaunchedEffect(Unit) {
-        val qpResult = onlineRepository.getHomeQuickPicks()
-        qpResult.getOrNull()?.let { livePicks ->
-            if (livePicks.isNotEmpty()) {
-                quickPicks = livePicks
-            }
+        launch {
+            val qpResult = onlineRepository.getHomeQuickPicks()
+            quickPicks = qpResult.getOrDefault(emptyList())
+            isLoadingQuickPicks = false
         }
-
-        val trendingResult = onlineRepository.getHomeTrending()
-        trendingResult.getOrNull()?.let { liveAlbums ->
-            if (liveAlbums.isNotEmpty()) {
-                trendingAlbums = liveAlbums
-            }
+        launch {
+            val trendingResult = onlineRepository.getHomeTrending()
+            trendingAlbums = trendingResult.getOrDefault(emptyList())
+            isLoadingTrending = false
         }
-    }
-
-    val samplePlaylists = remember {
-        listOf(
-            Album("p1", "Synthwave Cyberpunk Nights", "Lunify Sound Lab", "2026", "", 45),
-            Album("p2", "Lofi Beats for Coding", "Chillhop Music", "2026", "", 60),
-            Album("p3", "Deep Focus Techno", "Lunify Curators", "2026", "", 32),
-        )
-    }
-
-    val sampleArtists = remember {
-        listOf(
-            Artist("art1", "Daft Punk", "10.2M Fans"),
-            Artist("art2", "The Weeknd", "35.4M Fans"),
-            Artist("art3", "M83", "4.8M Fans"),
-            Artist("art4", "Tame Impala", "7.1M Fans"),
-        )
+        launch {
+            val playlistsResult = onlineRepository.getHomePlaylists()
+            featuredPlaylists = playlistsResult.getOrDefault(emptyList())
+            isLoadingPlaylists = false
+        }
+        launch {
+            val artistsResult = onlineRepository.getTopArtists()
+            topArtists = artistsResult.getOrDefault(emptyList())
+            isLoadingArtists = false
+        }
     }
 
     Box(
@@ -256,19 +239,20 @@ fun HomeScreen(
                 Spacer(modifier = Modifier.height(20.dp))
             }
 
-            // 3. Quick Picks 4-Song Group
+            // 3. Quick Picks 4-Song Group (Real live songs from YouTube Music)
             item {
                 QuickPicksSection(
                     tracks = quickPicks,
                     activeTrackId = playerState.currentTrack?.id,
                     isPlaying = playerState.isPlaying,
-                    onTrackClick = onTrackSelect,
+                    onTrackClick = { track -> onPlayQueue(quickPicks, track) },
                     onMoreClick = onOpenTrackOptions,
+                    isLoading = isLoadingQuickPicks,
                 )
                 Spacer(modifier = Modifier.height(28.dp))
             }
 
-            // 4. Trending Now & Top Charts Carousel
+            // 4. Trending Now & Top Charts Carousel (Real albums from InnerTube)
             item {
                 Column(modifier = Modifier.fillMaxWidth()) {
                     Row(
@@ -292,21 +276,32 @@ fun HomeScreen(
                         contentPadding = PaddingValues(horizontal = 20.dp),
                         horizontalArrangement = Arrangement.spacedBy(14.dp),
                     ) {
-                        items(trendingAlbums) { album ->
-                            MediaCard(
-                                title = album.title,
-                                subtitle = album.artist,
-                                thumbnailUrl = album.thumbnailUrl,
-                                cardWidth = 145.dp,
-                                onClick = { onAlbumSelect(album) },
-                            )
+                        if (trendingAlbums.isEmpty() && isLoadingTrending) {
+                            items(3) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(width = 145.dp, height = 185.dp)
+                                        .clip(RoundedCornerShape(14.dp))
+                                        .background(GlassSurfaceElevated),
+                                )
+                            }
+                        } else {
+                            items(trendingAlbums) { album ->
+                                MediaCard(
+                                    title = album.title,
+                                    subtitle = album.artist,
+                                    thumbnailUrl = album.thumbnailUrl,
+                                    cardWidth = 145.dp,
+                                    onClick = { onAlbumSelect(album) },
+                                )
+                            }
                         }
                     }
                 }
                 Spacer(modifier = Modifier.height(28.dp))
             }
 
-            // 5. Curated Playlists Carousel
+            // 5. Curated Playlists Carousel (Real community playlists from InnerTube)
             item {
                 Column(modifier = Modifier.fillMaxWidth()) {
                     Row(
@@ -330,20 +325,32 @@ fun HomeScreen(
                         contentPadding = PaddingValues(horizontal = 20.dp),
                         horizontalArrangement = Arrangement.spacedBy(14.dp),
                     ) {
-                        items(samplePlaylists) { playlist ->
-                            MediaCard(
-                                title = playlist.title,
-                                subtitle = playlist.artist,
-                                cardWidth = 145.dp,
-                                onClick = { onAlbumSelect(playlist) },
-                            )
+                        if (featuredPlaylists.isEmpty() && isLoadingPlaylists) {
+                            items(3) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(width = 145.dp, height = 185.dp)
+                                        .clip(RoundedCornerShape(14.dp))
+                                        .background(GlassSurfaceElevated),
+                                )
+                            }
+                        } else {
+                            items(featuredPlaylists) { playlist ->
+                                MediaCard(
+                                    title = playlist.title,
+                                    subtitle = playlist.artist,
+                                    thumbnailUrl = playlist.thumbnailUrl,
+                                    cardWidth = 145.dp,
+                                    onClick = { onAlbumSelect(playlist) },
+                                )
+                            }
                         }
                     }
                 }
                 Spacer(modifier = Modifier.height(28.dp))
             }
 
-            // 6. Top Artists Circular Row
+            // 6. Top Artists Circular Row (Real top artists from InnerTube Charts)
             item {
                 Column(modifier = Modifier.fillMaxWidth()) {
                     Text(
@@ -360,36 +367,68 @@ fun HomeScreen(
                         contentPadding = PaddingValues(horizontal = 20.dp),
                         horizontalArrangement = Arrangement.spacedBy(16.dp),
                     ) {
-                        items(sampleArtists) { artist ->
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                modifier = Modifier.width(90.dp),
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(76.dp)
-                                        .liquidGlass(
-                                            shape = CircleShape,
-                                            backgroundColor = ObsidianSurfaceHigh,
-                                            interactive = true,
-                                        ),
-                                    contentAlignment = Alignment.Center,
+                        if (topArtists.isEmpty() && isLoadingArtists) {
+                            items(4) {
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    modifier = Modifier.width(90.dp),
                                 ) {
-                                    LucideIcon(
-                                        iconRes = LucideIcons.Profile,
-                                        contentDescription = artist.name,
-                                        size = 32.dp,
-                                        tint = Color.White,
+                                    Box(
+                                        modifier = Modifier
+                                            .size(76.dp)
+                                            .clip(CircleShape)
+                                            .background(GlassSurfaceElevated),
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Box(
+                                        modifier = Modifier
+                                            .width(60.dp)
+                                            .height(12.dp)
+                                            .clip(RoundedCornerShape(4.dp))
+                                            .background(ObsidianSurfaceHigh),
                                     )
                                 }
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Text(
-                                    text = artist.name,
-                                    color = TextPrimary,
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    maxLines = 1,
-                                )
+                            }
+                        } else {
+                            items(topArtists) { artist ->
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    modifier = Modifier.width(90.dp),
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(76.dp)
+                                            .clip(CircleShape)
+                                            .background(ObsidianSurfaceHigh),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        if (artist.thumbnailUrl.isNotBlank()) {
+                                            AsyncImage(
+                                                model = artist.thumbnailUrl,
+                                                contentDescription = artist.name,
+                                                modifier = Modifier
+                                                    .fillMaxSize()
+                                                    .clip(CircleShape),
+                                                contentScale = ContentScale.Crop,
+                                            )
+                                        } else {
+                                            LucideIcon(
+                                                iconRes = LucideIcons.Profile,
+                                                contentDescription = artist.name,
+                                                size = 32.dp,
+                                                tint = Color.White,
+                                            )
+                                        }
+                                    }
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text(
+                                        text = artist.name,
+                                        color = TextPrimary,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        maxLines = 1,
+                                    )
+                                }
                             }
                         }
                     }

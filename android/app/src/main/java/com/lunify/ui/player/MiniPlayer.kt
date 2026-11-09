@@ -1,8 +1,16 @@
 package com.lunify.ui.player
 
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode as AnimRepeatMode
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.ui.graphics.graphicsLayer
+import com.lunify.domain.model.PlayerStatus
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
@@ -206,20 +214,43 @@ fun MiniPlayer(
                 Spacer(modifier = Modifier.width(8.dp))
 
                 // Play / Pause Action Button (Pure White circle with Black Icon)
+                // When audio is buffering from network, rotates loading spinner
+                val isBuffering = playerState.status == PlayerStatus.BUFFERING
+                val infiniteTransition = rememberInfiniteTransition(label = "mini_loading_spinner")
+                val rotationAngle by infiniteTransition.animateFloat(
+                    initialValue = 0f,
+                    targetValue = 360f,
+                    animationSpec = infiniteRepeatable(
+                        animation = tween(durationMillis = 850, easing = LinearEasing),
+                        repeatMode = AnimRepeatMode.Restart,
+                    ),
+                    label = "mini_spinner_rot",
+                )
+
                 Box(
                     modifier = Modifier
                         .size(38.dp)
                         .clip(CircleShape)
                         .background(Color.White)
-                        .clickable(onClick = onTogglePlayPause),
+                        .clickable(enabled = !isBuffering, onClick = onTogglePlayPause),
                     contentAlignment = Alignment.Center,
                 ) {
-                    LucideIcon(
-                        iconRes = if (playerState.isPlaying) LucideIcons.Pause else LucideIcons.Play,
-                        contentDescription = if (playerState.isPlaying) "Pause" else "Play",
-                        size = 18.dp,
-                        tint = Color.Black,
-                    )
+                    if (isBuffering) {
+                        LucideIcon(
+                            iconRes = LucideIcons.Loading,
+                            contentDescription = "Loading audio",
+                            size = 18.dp,
+                            tint = Color.Black,
+                            modifier = Modifier.graphicsLayer { rotationZ = rotationAngle },
+                        )
+                    } else {
+                        LucideIcon(
+                            iconRes = if (playerState.isPlaying) LucideIcons.Pause else LucideIcons.Play,
+                            contentDescription = if (playerState.isPlaying) "Pause" else "Play",
+                            size = 18.dp,
+                            tint = Color.Black,
+                        )
+                    }
                 }
 
                 Spacer(modifier = Modifier.width(6.dp))

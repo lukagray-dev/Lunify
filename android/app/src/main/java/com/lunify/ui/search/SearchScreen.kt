@@ -86,6 +86,7 @@ import kotlinx.coroutines.launch
 fun SearchScreen(
     playerState: PlayerState,
     onTrackSelect: (Track) -> Unit,
+    onPlayQueue: (List<Track>, Track) -> Unit = { _, t -> onTrackSelect(t) },
     onOpenTrackOptions: (Track) -> Unit = {},
     onlineRepository: OnlineMusicRepository = remember { OnlineMusicRepository() },
     modifier: Modifier = Modifier,
@@ -139,7 +140,7 @@ fun SearchScreen(
                     val filterParam = when (category) {
                         "Songs" -> YouTubeMusicClient.FILTER_SONGS
                         "Videos" -> YouTubeMusicClient.FILTER_VIDEOS
-                        else -> null // All
+                        else -> YouTubeMusicClient.FILTER_SONGS // For music search, "All" defaults to songs with duration
                     }
                     val result = onlineRepository.searchSongs(trimmed, filterParam)
                     searchResults = result.getOrElse { emptyList() }
@@ -428,7 +429,7 @@ fun SearchScreen(
                             track = track,
                             isActive = track.id == playerState.currentTrack?.id,
                             isPlaying = playerState.isPlaying,
-                            onClick = { onTrackSelect(track) },
+                            onClick = { onPlayQueue(searchResults, track) },
                             onMoreClick = { onOpenTrackOptions(track) },
                         )
                     }

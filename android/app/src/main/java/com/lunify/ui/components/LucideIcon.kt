@@ -59,6 +59,7 @@ object LucideIcons {
     // Playback & Controls
     val Play = R.drawable.ic_lucide_play
     val Pause = R.drawable.ic_lucide_pause
+    val Loading = R.drawable.ic_loading
     val SkipForward = R.drawable.ic_lucide_skip_forward
     val SkipBack = R.drawable.ic_lucide_skip_back
     val Repeat = R.drawable.ic_lucide_repeat
@@ -84,7 +85,6 @@ object LucideIcons {
     val Warning = R.drawable.ic_lucide_warning
     val Close = R.drawable.ic_lucide_close
     val X = R.drawable.ic_lucide_x
-    val Loading = R.drawable.ic_lucide_loading
     val Wave = R.drawable.ic_lucide_wave
 }
 

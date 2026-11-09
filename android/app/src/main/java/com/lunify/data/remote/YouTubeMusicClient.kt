@@ -2,6 +2,7 @@ package com.lunify.data.remote
 
 import android.util.Log
 import com.lunify.domain.model.Album
+import com.lunify.domain.model.Artist
 import com.lunify.domain.model.Track
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -54,14 +55,16 @@ class YouTubeMusicClient(
         private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
 
         // Filter parameters recognized by YouTube Music's search endpoint
-        // Songs only filter
-        const val FILTER_SONGS = "EgWKAQIIAWoKEAkQChAFEAMQBA%3D%3D"
+        // Songs only filter (returns pure tracks with real durations)
+        const val FILTER_SONGS = "EgWKAQIIAWoKEAkQBRAKEAMQBA=="
         // Albums only filter
-        const val FILTER_ALBUMS = "EgWKAQIYAWoKEAkQChAFEAMQBA%3D%3D"
+        const val FILTER_ALBUMS = "EgWKAQIYAWoKEAkQChAFEAMQBA=="
         // Music videos filter
-        const val FILTER_VIDEOS = "EgWKAQIQAWoKEAkQChAFEAMQBA%3D%3D"
+        const val FILTER_VIDEOS = "EgWKAQIQAWoKEAkQChAFEAMQBA=="
         // Community and official playlists
-        const val FILTER_PLAYLISTS = "EgWKAQIoAWoKEAkQChAFEAMQBA%3D%3D"
+        const val FILTER_PLAYLISTS = "EgWKAQIoAWoKEAkQChAFEAMQBA=="
+        // Artists filter
+        const val FILTER_ARTISTS = "EgWKAQIgAWoKEAkQChAFEAMQBA=="
 
         // Browser headers mirroring modern Chrome on desktop
         private const val USER_AGENT =
@@ -202,7 +205,9 @@ class YouTubeMusicClient(
 
     /**
      * Fetches the YouTube Music Home page and extracts "Quick picks" tracks.
-     * This feeds the Home screen with trending and recommended songs.
+     * If the anonymous web response has no quick picks shelf, it automatically
+     * queries trending hit songs via InnerTube search so the Home screen always
+     * displays real, playable tracks with real durations!
      */
     suspend fun getHomeQuickPicks(): Result<List<Track>> = withContext(Dispatchers.IO) {
         try {
@@ -213,7 +218,14 @@ class YouTubeMusicClient(
 
             val jsonString = postInnerTube("browse", payload)
             val root = JSONObject(jsonString)
-            val tracks = parseHomeQuickPicks(root)
+            var tracks = parseHomeQuickPicks(root)
+
+            // Fallback: If anonymous browse returned no direct songs shelf,
+            // fetch trending top hits so the Quick Picks section has 100% real music!
+            if (tracks.isEmpty()) {
+                val searchResult = searchSongs("Top Hits 2026", FILTER_SONGS)
+                tracks = searchResult.getOrDefault(emptyList())
+            }
             Result.success(tracks)
         } catch (e: Throwable) {
             Log.e(TAG, "Failed to fetch home quick picks: ${e.message}", e)
@@ -237,6 +249,46 @@ class YouTubeMusicClient(
             Result.success(albums)
         } catch (e: Throwable) {
             Log.e(TAG, "Failed to fetch home trending albums: ${e.message}", e)
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Fetches real community and curated playlists from the YouTube Music Home feed.
+     */
+    suspend fun getHomePlaylists(): Result<List<Album>> = withContext(Dispatchers.IO) {
+        try {
+            val payload = JSONObject().apply {
+                put("context", createBaseContext())
+                put("browseId", "FEmusic_home")
+            }
+
+            val jsonString = postInnerTube("browse", payload)
+            val root = JSONObject(jsonString)
+            val playlists = parseHomePlaylists(root)
+            Result.success(playlists)
+        } catch (e: Throwable) {
+            Log.e(TAG, "Failed to fetch home playlists: ${e.message}", e)
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Fetches real top artists from the YouTube Music Charts page (`FEmusic_charts`).
+     */
+    suspend fun getTopArtists(): Result<List<Artist>> = withContext(Dispatchers.IO) {
+        try {
+            val payload = JSONObject().apply {
+                put("context", createBaseContext())
+                put("browseId", "FEmusic_charts")
+            }
+
+            val jsonString = postInnerTube("browse", payload)
+            val root = JSONObject(jsonString)
+            val artists = parseChartsArtists(root)
+            Result.success(artists)
+        } catch (e: Throwable) {
+            Log.e(TAG, "Failed to fetch top artists: ${e.message}", e)
             Result.failure(e)
         }
     }
@@ -539,6 +591,8 @@ class YouTubeMusicClient(
 
     /**
      * Converts a single [musicResponsiveListItemRenderer] JSON node into our clean [Track] model.
+     * Extracts title, artist, album, duration (parsed using regex across flex/fixed columns),
+     * and high-res thumbnail.
      */
     private fun parseResponsiveListItemToTrack(item: JSONObject): Track? {
         val playlistItemData = item.optJSONObject("playlistItemData")
@@ -563,10 +617,50 @@ class YouTubeMusicClient(
         val title = col0Runs.optJSONObject(0)?.optString("text").orEmpty()
         if (title.isEmpty()) return null
 
-        // Column 1: Artist, Album, Duration separated by bullet points
+        // Extract duration across all flexColumns and fixedColumns using time regex
+        var durationText = "0:00"
+        val durationRegex = Regex("""^\d{1,2}:\d{2}(:\d{2})?$""")
+
+        // Search through all runs in flexColumns
+        for (i in 0 until flexColumns.length()) {
+            val colRuns = flexColumns.optJSONObject(i)
+                ?.optJSONObject("musicResponsiveListItemFlexColumnRenderer")
+                ?.optJSONObject("text")
+                ?.optJSONArray("runs") ?: continue
+            for (k in 0 until colRuns.length()) {
+                val text = colRuns.optJSONObject(k)?.optString("text").orEmpty().trim()
+                if (durationRegex.matches(text)) {
+                    durationText = text
+                    break
+                }
+            }
+            if (durationText != "0:00") break
+        }
+
+        // If not found in flexColumns, check fixedColumns
+        if (durationText == "0:00") {
+            val fixedColumns = item.optJSONArray("fixedColumns")
+            if (fixedColumns != null) {
+                for (i in 0 until fixedColumns.length()) {
+                    val colRuns = fixedColumns.optJSONObject(i)
+                        ?.optJSONObject("musicResponsiveListItemFixedColumnRenderer")
+                        ?.optJSONObject("text")
+                        ?.optJSONArray("runs") ?: continue
+                    for (k in 0 until colRuns.length()) {
+                        val text = colRuns.optJSONObject(k)?.optString("text").orEmpty().trim()
+                        if (durationRegex.matches(text)) {
+                            durationText = text
+                            break
+                        }
+                    }
+                    if (durationText != "0:00") break
+                }
+            }
+        }
+
+        // Parse artist and album from flexColumn 1
         var artist = "Unknown Artist"
         var album = ""
-        var durationText = "0:00"
 
         if (flexColumns.length() > 1) {
             val col1Runs = flexColumns.optJSONObject(1)
@@ -576,28 +670,25 @@ class YouTubeMusicClient(
 
             val parts = mutableListOf<String>()
             for (k in 0 until col1Runs.length()) {
-                val text = col1Runs.optJSONObject(k)?.optString("text").orEmpty()
-                if (text.isNotBlank() && text != "•") {
-                    parts.add(text.trim())
+                val text = col1Runs.optJSONObject(k)?.optString("text").orEmpty().trim()
+                // Filter out empty runs, bullet separators ("•"), and duration text
+                if (text.isNotEmpty() && text != "•" && !durationRegex.matches(text)) {
+                    parts.add(text)
                 }
             }
 
             if (parts.isNotEmpty()) {
-                artist = parts[0]
-            }
-            if (parts.size >= 2) {
-                // If the second part looks like mm:ss or has letters, check if it's album or duration
-                val second = parts[1]
-                if (second.contains(":") && second.length <= 6) {
-                    durationText = second
+                // If the first part is a category like "Song" or "Video", skip it to get real artist
+                if (parts[0].equals("Song", ignoreCase = true) || parts[0].equals("Video", ignoreCase = true)) {
+                    if (parts.size > 1) {
+                        artist = parts[1]
+                        if (parts.size > 2) album = parts[2]
+                    }
                 } else {
-                    album = second
-                }
-            }
-            if (parts.size >= 3) {
-                val third = parts.last()
-                if (third.contains(":") && third.length <= 6) {
-                    durationText = third
+                    artist = parts[0]
+                    if (parts.size > 1) {
+                        album = parts[1]
+                    }
                 }
             }
         }
@@ -614,8 +705,143 @@ class YouTubeMusicClient(
             durationMs = durationMs,
             thumbnailUrl = thumbnail,
             isDownloaded = false,
-            contentUri = "", // Dynamic stream extraction
+            contentUri = "", // Resolved dynamically by YouTubeExtractor
         )
+    }
+
+    /**
+     * Parses community and curated playlists from YouTube Music home feed carousels.
+     */
+    private fun parseHomePlaylists(root: JSONObject): List<Album> {
+        val playlists = mutableListOf<Album>()
+        val tabs = root.optJSONObject("contents")
+            ?.optJSONObject("singleColumnBrowseResultsRenderer")
+            ?.optJSONArray("tabs") ?: return playlists
+
+        if (tabs.length() == 0) return playlists
+        val sections = tabs.optJSONObject(0)
+            ?.optJSONObject("tabRenderer")
+            ?.optJSONObject("content")
+            ?.optJSONObject("sectionListRenderer")
+            ?.optJSONArray("contents") ?: return playlists
+
+        for (i in 0 until sections.length()) {
+            val carousel = sections.optJSONObject(i)?.optJSONObject("musicCarouselShelfRenderer") ?: continue
+            val headerTitle = carousel.optJSONObject("header")
+                ?.optJSONObject("musicCarouselShelfBasicHeaderRenderer")
+                ?.optJSONObject("title")
+                ?.optJSONArray("runs")
+                ?.optJSONObject(0)
+                ?.optString("text")
+                .orEmpty()
+
+            if (headerTitle.contains("playlist", ignoreCase = true) || playlists.isEmpty()) {
+                val contents = carousel.optJSONArray("contents") ?: JSONArray()
+                for (j in 0 until contents.length()) {
+                    val twoRow = contents.optJSONObject(j)?.optJSONObject("musicTwoRowItemRenderer") ?: continue
+                    val title = twoRow.optJSONObject("title")
+                        ?.optJSONArray("runs")
+                        ?.optJSONObject(0)
+                        ?.optString("text") ?: continue
+
+                    val subtitleRuns = twoRow.optJSONObject("subtitle")?.optJSONArray("runs") ?: JSONArray()
+                    val subtitleBuilder = StringBuilder()
+                    for (k in 0 until subtitleRuns.length()) {
+                        subtitleBuilder.append(subtitleRuns.optJSONObject(k)?.optString("text").orEmpty())
+                    }
+
+                    val browseId = twoRow.optJSONObject("navigationEndpoint")
+                        ?.optJSONObject("browseEndpoint")
+                        ?.optString("browseId").orEmpty()
+
+                    val thumb = extractThumbnailFromTwoRow(twoRow)
+
+                    playlists.add(
+                        Album(
+                            id = browseId.ifEmpty { title },
+                            title = title,
+                            artist = subtitleBuilder.toString().trim(),
+                            thumbnailUrl = thumb,
+                        ),
+                    )
+                }
+                if (playlists.isNotEmpty()) break
+            }
+        }
+        return playlists
+    }
+
+    /**
+     * Parses top trending artists from the YouTube Music Charts feed.
+     */
+    private fun parseChartsArtists(root: JSONObject): List<Artist> {
+        val artists = mutableListOf<Artist>()
+        val tabs = root.optJSONObject("contents")
+            ?.optJSONObject("singleColumnBrowseResultsRenderer")
+            ?.optJSONArray("tabs") ?: return artists
+
+        if (tabs.length() == 0) return artists
+        val sections = tabs.optJSONObject(0)
+            ?.optJSONObject("tabRenderer")
+            ?.optJSONObject("content")
+            ?.optJSONObject("sectionListRenderer")
+            ?.optJSONArray("contents") ?: return artists
+
+        for (i in 0 until sections.length()) {
+            val carousel = sections.optJSONObject(i)?.optJSONObject("musicCarouselShelfRenderer") ?: continue
+            val headerTitle = carousel.optJSONObject("header")
+                ?.optJSONObject("musicCarouselShelfBasicHeaderRenderer")
+                ?.optJSONObject("title")
+                ?.optJSONArray("runs")
+                ?.optJSONObject(0)
+                ?.optString("text")
+                .orEmpty()
+
+            if (headerTitle.contains("Top artists", ignoreCase = true) || headerTitle.contains("Artists", ignoreCase = true)) {
+                val contents = carousel.optJSONArray("contents") ?: JSONArray()
+                for (j in 0 until contents.length()) {
+                    val item = contents.optJSONObject(j)?.optJSONObject("musicResponsiveListItemRenderer") ?: continue
+                    val flexColumns = item.optJSONArray("flexColumns") ?: continue
+                    if (flexColumns.length() == 0) continue
+
+                    val name = flexColumns.optJSONObject(0)
+                        ?.optJSONObject("musicResponsiveListItemFlexColumnRenderer")
+                        ?.optJSONObject("text")
+                        ?.optJSONArray("runs")
+                        ?.optJSONObject(0)
+                        ?.optString("text").orEmpty()
+
+                    if (name.isEmpty()) continue
+
+                    var subs = ""
+                    if (flexColumns.length() > 1) {
+                        subs = flexColumns.optJSONObject(1)
+                            ?.optJSONObject("musicResponsiveListItemFlexColumnRenderer")
+                            ?.optJSONObject("text")
+                            ?.optJSONArray("runs")
+                            ?.optJSONObject(0)
+                            ?.optString("text").orEmpty()
+                    }
+
+                    val browseId = item.optJSONObject("navigationEndpoint")
+                        ?.optJSONObject("browseEndpoint")
+                        ?.optString("browseId").orEmpty()
+
+                    val thumb = extractThumbnail(item)
+
+                    artists.add(
+                        Artist(
+                            id = browseId.ifEmpty { name },
+                            name = name,
+                            subscribers = subs,
+                            thumbnailUrl = thumb,
+                        ),
+                    )
+                }
+                if (artists.isNotEmpty()) break
+            }
+        }
+        return artists
     }
 
     /**
