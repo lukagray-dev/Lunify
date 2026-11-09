@@ -31,6 +31,7 @@ import com.lunify.domain.model.PlayerState
 import com.lunify.domain.model.PlayerStatus
 import com.lunify.domain.model.RepeatMode
 import com.lunify.domain.model.Track
+import com.lunify.player.download.DownloadNotificationManager
 import com.lunify.player.service.LunifyMediaService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -90,6 +91,7 @@ class AudioPlayerManager(
     private val context: Context,
     val libraryStorage: LibraryStorage,
     private val onlineRepository: OnlineMusicRepository = OnlineMusicRepository(),
+    private val downloadNotificationManager: DownloadNotificationManager = DownloadNotificationManager(context),
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var progressTickerJob: Job? = null
@@ -388,12 +390,21 @@ class AudioPlayerManager(
     /**
      * Downloads an online track to the device for offline playback.
      * Writes audio bytes with standard browser headers to avoid CDN 403 blocks,
-     * updates [LibraryStorage], and registers the song in Android's MediaStore.
+     * updates [LibraryStorage], posts progress & status notifications, and registers
+     * the song in Android's MediaStore.
      */
     fun downloadTrack(track: Track, onComplete: ((Boolean) -> Unit)? = null) {
         scope.launch(Dispatchers.IO) {
             try {
                 Log.d(TAG, "Starting download for track: ${track.title} (${track.id})")
+
+                // Step A: Immediately show indeterminate notification to acknowledge user action
+                downloadNotificationManager.showDownloadProgress(
+                    track = track,
+                    progressPercent = -1,
+                    downloadedBytes = 0L,
+                    totalBytes = -1L,
+                )
 
                 // 1. Resolve direct audio stream URL if not already present
                 val streamUrl = if (track.contentUri.startsWith("http://") || track.contentUri.startsWith("https://")) {
@@ -428,13 +439,53 @@ class AudioPlayerManager(
                 if (!response.isSuccessful) {
                     Log.e(TAG, "Download failed with HTTP ${response.code} for ${track.title}")
                     response.close()
+                    downloadNotificationManager.showDownloadFailed(track)
                     withContext(Dispatchers.Main) { onComplete?.invoke(false) }
                     return@launch
                 }
 
-                response.body?.byteStream()?.use { input ->
+                val body = response.body
+                val contentLength = body?.contentLength() ?: -1L
+                var downloadedBytes = 0L
+                var lastNotifiedTime = System.currentTimeMillis()
+                var lastNotifiedPercent = -1
+
+                val buffer = ByteArray(32 * 1024) // 32KB buffer for optimal I/O throughput
+                body?.byteStream()?.use { input ->
                     FileOutputStream(destinationFile).use { output ->
-                        input.copyTo(output)
+                        var bytesRead: Int
+                        while (input.read(buffer).also { bytesRead = it } != -1) {
+                            output.write(buffer, 0, bytesRead)
+                            downloadedBytes += bytesRead
+
+                            val currentTime = System.currentTimeMillis()
+                            if (contentLength > 0L) {
+                                val percent = ((downloadedBytes * 100) / contentLength).toInt().coerceIn(0, 100)
+                                // Throttle notification updates: notify every 2% increase, or every 400ms, or at 100%
+                                if (percent != lastNotifiedPercent && (percent - lastNotifiedPercent >= 2 || currentTime - lastNotifiedTime >= 400L || percent == 100)) {
+                                    lastNotifiedPercent = percent
+                                    lastNotifiedTime = currentTime
+                                    downloadNotificationManager.showDownloadProgress(
+                                        track = track,
+                                        progressPercent = percent,
+                                        downloadedBytes = downloadedBytes,
+                                        totalBytes = contentLength,
+                                    )
+                                }
+                            } else {
+                                // For indeterminate streams without Content-Length, update byte counters every 1000ms
+                                if (currentTime - lastNotifiedTime >= 1000L) {
+                                    lastNotifiedTime = currentTime
+                                    downloadNotificationManager.showDownloadProgress(
+                                        track = track,
+                                        progressPercent = -1,
+                                        downloadedBytes = downloadedBytes,
+                                        totalBytes = -1L,
+                                    )
+                                }
+                            }
+                        }
+                        output.flush()
                     }
                 }
 
@@ -477,6 +528,9 @@ class AudioPlayerManager(
                     Log.w(TAG, "MediaStore registration notice: ${e.message}")
                 }
 
+                // 7. Transition notification to completed state
+                downloadNotificationManager.showDownloadComplete(track)
+
                 withContext(Dispatchers.Main) {
                     // If current track was the one downloaded, update state
                     if (_playerState.value.currentTrack?.id == track.id) {
@@ -486,6 +540,7 @@ class AudioPlayerManager(
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Download failed for track '${track.title}': ${e.message}", e)
+                downloadNotificationManager.showDownloadFailed(track)
                 withContext(Dispatchers.Main) { onComplete?.invoke(false) }
             }
         }

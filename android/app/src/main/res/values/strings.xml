@@ -2,4 +2,9 @@
     <string name="app_name">Lunify</string>
     <string name="notification_channel_name">Lunify Playback</string>
     <string name="notification_channel_description">Displays playback controls, artwork, and track information</string>
+    <string name="download_channel_name">Lunify Downloads</string>
+    <string name="download_channel_description">Shows progress and completion status for downloaded songs</string>
+    <string name="download_notification_downloading">Downloading…</string>
+    <string name="download_notification_completed">Download completed</string>
+    <string name="download_notification_failed">Download failed</string>
 </resources>
