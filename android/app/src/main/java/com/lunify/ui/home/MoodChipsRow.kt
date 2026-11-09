@@ -71,7 +71,7 @@ fun MoodChipsRow(
         items(moods) { mood ->
             val isSelected = mood.id == selectedMoodId
             val animatedBgColor by animateColorAsState(
-                targetValue = if (isSelected) AccentCyan else GlassPill,
+                targetValue = if (isSelected) Color.White else GlassPill,
                 animationSpec = spring(),
                 label = "moodChipBg",
             )

@@ -9,13 +9,19 @@ import android.os.Build
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -217,56 +223,84 @@ fun LibraryScreen(
                 .statusBarsPadding(),
         ) {
             // ------------------------------------------------------------------
-            // 1. Header: Title & Real Storage Usage Pill
+            // 1. Header: Symmetrical Brand Icon + Title & 40dp Storage Capsule
             // ------------------------------------------------------------------
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 20.dp, vertical = 14.dp),
+                    .padding(horizontal = 20.dp, vertical = 12.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(
-                    text = "Your Library",
-                    color = TextPrimary,
-                    fontSize = 24.sp,
-                    fontWeight = FontWeight.Bold,
-                )
-
-                // Storage usage badge
-                LiquidGlassContainer(
-                    shape = CircleShape,
-                    backgroundColor = GlassSurfaceElevated,
-                    modifier = Modifier.height(32.dp),
+                // Left: Icon container + "Your Library" title
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .liquidGlass(
+                                shape = CircleShape,
+                                backgroundColor = Color.White.copy(alpha = 0.08f),
+                                interactive = false,
+                            ),
+                        contentAlignment = Alignment.Center,
                     ) {
                         LucideIcon(
-                            iconRes = LucideIcons.Folder,
-                            contentDescription = null,
-                            size = 14.dp,
-                            tint = if (hasAudioPermission) Color.White else TextMuted,
-                        )
-                        Text(
-                            text = formattedStorageString,
-                            color = if (hasAudioPermission) Color.White else TextMuted,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.SemiBold,
+                            iconRes = LucideIcons.Download,
+                            contentDescription = "Your Library",
+                            size = 20.dp,
+                            tint = Color.White,
                         )
                     }
+
+                    Text(
+                        text = "Your Library",
+                        color = TextPrimary,
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = (-0.5).sp,
+                    )
+                }
+
+                // Right: Symmetrical 40dp Liquid Glass Storage Capsule
+                Row(
+                    modifier = Modifier
+                        .height(40.dp)
+                        .liquidGlass(
+                            shape = CircleShape,
+                            backgroundColor = GlassSurfaceElevated,
+                            interactive = false,
+                            borderWidth = 1.dp,
+                        )
+                        .padding(horizontal = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    LucideIcon(
+                        iconRes = LucideIcons.Folder,
+                        contentDescription = null,
+                        size = 15.dp,
+                        tint = if (hasAudioPermission) Color.White else TextMuted,
+                    )
+                    Text(
+                        text = formattedStorageString,
+                        color = if (hasAudioPermission) Color.White else TextMuted,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    )
                 }
             }
 
             // ------------------------------------------------------------------
             // 2. Subtabs Row ("Downloaded", "Favorites", "Playlists", "History")
             // ------------------------------------------------------------------
+            Spacer(modifier = Modifier.height(6.dp))
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                    .padding(horizontal = 16.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 LibrarySubTabs.forEach { tab ->
@@ -314,105 +348,121 @@ fun LibraryScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
             // ------------------------------------------------------------------
-            // 3. Tab Content Switcher
+            // 3. Tab Content Switcher with Smooth Swipe Transitions
             // ------------------------------------------------------------------
-            when (selectedTab) {
-                "Downloaded" -> {
-                    DownloadedSection(
-                        hasPermission = hasAudioPermission,
-                        isLoading = isLoadingTracks,
-                        tracks = sortedLocalTracks,
-                        playerState = playerState,
-                        currentSortOption = currentSortOption,
-                        onRequestPermission = { permissionLauncher.launch(permissionToRequest) },
-                        onTrackClick = { track -> onPlayQueue(sortedLocalTracks, track) },
-                        onPlayAll = {
-                            if (sortedLocalTracks.isNotEmpty()) {
-                                onPlayQueue(sortedLocalTracks, sortedLocalTracks.first())
-                            }
-                        },
-                        onShuffleAll = {
-                            if (sortedLocalTracks.isNotEmpty()) {
-                                val shuffled = sortedLocalTracks.shuffled()
-                                onPlayQueue(shuffled, shuffled.first())
-                            }
-                        },
-                        onOpenSort = onOpenSortSheet,
-                        onMoreClick = onOpenTrackOptions,
-                    )
-                }
-
-                "Favorites" -> {
-                    FavoritesSection(
-                        tracks = favoriteTracks,
-                        playerState = playerState,
-                        onTrackClick = { track -> onPlayQueue(favoriteTracks, track) },
-                        onMoreClick = onOpenTrackOptions,
-                    )
-                }
-
-                "History" -> {
-                    HistorySection(
-                        history = historyItems,
-                        playerState = playerState,
-                        onTrackClick = { track -> onTrackSelect(track) },
-                        onClearHistory = {
-                            libraryStorage.clearHistory()
-                            historyItems = emptyList()
-                        },
-                    )
-                }
-
-                "Playlists" -> {
-                    if (activePlaylistDetail != null) {
-                        // Detailed playlist view
-                        val playlist = activePlaylistDetail!!
-                        val playlistTracks = remember(playlist, localTracks) {
-                            localTracks.filter { playlist.trackIds.contains(it.id) || it.folderName == playlist.name }
-                        }
-
-                        PlaylistDetailSection(
-                            playlist = playlist,
-                            tracks = playlistTracks,
+            AnimatedContent(
+                targetState = selectedTab,
+                transitionSpec = {
+                    val initialIdx = LibrarySubTabs.indexOf(initialState)
+                    val targetIdx = LibrarySubTabs.indexOf(targetState)
+                    val direction = if (targetIdx >= initialIdx) 1 else -1
+                    (slideInHorizontally(animationSpec = tween(320, easing = FastOutSlowInEasing)) { width -> width * direction } +
+                            fadeIn(animationSpec = tween(320)))
+                        .togetherWith(
+                            slideOutHorizontally(animationSpec = tween(320, easing = FastOutSlowInEasing)) { width -> width * -direction } +
+                                    fadeOut(animationSpec = tween(320))
+                        )
+                },
+                label = "librarySubTabContentTransition",
+            ) { currentTab ->
+                when (currentTab) {
+                    "Downloaded" -> {
+                        DownloadedSection(
+                            hasPermission = hasAudioPermission,
+                            isLoading = isLoadingTracks,
+                            tracks = sortedLocalTracks,
                             playerState = playerState,
-                            onBack = { activePlaylistDetail = null },
-                            onTrackClick = { track -> onPlayQueue(playlistTracks, track) },
+                            currentSortOption = currentSortOption,
+                            onRequestPermission = { permissionLauncher.launch(permissionToRequest) },
+                            onTrackClick = { track -> onPlayQueue(sortedLocalTracks, track) },
                             onPlayAll = {
-                                if (playlistTracks.isNotEmpty()) {
-                                    onPlayQueue(playlistTracks, playlistTracks.first())
+                                if (sortedLocalTracks.isNotEmpty()) {
+                                    onPlayQueue(sortedLocalTracks, sortedLocalTracks.first())
                                 }
                             },
                             onShuffleAll = {
-                                if (playlistTracks.isNotEmpty()) {
-                                    val shuffled = playlistTracks.shuffled()
+                                if (sortedLocalTracks.isNotEmpty()) {
+                                    val shuffled = sortedLocalTracks.shuffled()
                                     onPlayQueue(shuffled, shuffled.first())
                                 }
                             },
+                            onOpenSort = onOpenSortSheet,
                             onMoreClick = onOpenTrackOptions,
                         )
-                    } else {
-                        // Playlists overview
-                        PlaylistsSection(
-                            folderPlaylists = folderPlaylists,
-                            customPlaylists = customPlaylists,
-                            localTracksCount = localTracks.size,
-                            favoritesCount = favoriteTracks.size,
-                            onSelectDownloaded = { selectedTab = "Downloaded" },
-                            onSelectFavorites = { selectedTab = "Favorites" },
-                            onSelectPlaylist = { playlist -> activePlaylistDetail = playlist },
-                            onCreatePlaylist = { name ->
-                                val created = libraryStorage.createPlaylist(name)
-                                customPlaylists = libraryStorage.getCustomPlaylists()
-                                activePlaylistDetail = created
-                            },
-                            onDeleteCustomPlaylist = { playlistId ->
-                                libraryStorage.deletePlaylist(playlistId)
-                                customPlaylists = libraryStorage.getCustomPlaylists()
+                    }
+
+                    "Favorites" -> {
+                        FavoritesSection(
+                            tracks = favoriteTracks,
+                            playerState = playerState,
+                            onTrackClick = { track -> onPlayQueue(favoriteTracks, track) },
+                            onMoreClick = onOpenTrackOptions,
+                        )
+                    }
+
+                    "History" -> {
+                        HistorySection(
+                            history = historyItems,
+                            playerState = playerState,
+                            onTrackClick = { track -> onTrackSelect(track) },
+                            onClearHistory = {
+                                libraryStorage.clearHistory()
+                                historyItems = emptyList()
                             },
                         )
+                    }
+
+                    "Playlists" -> {
+                        if (activePlaylistDetail != null) {
+                            // Detailed playlist view
+                            val playlist = activePlaylistDetail!!
+                            val playlistTracks = remember(playlist, localTracks) {
+                                localTracks.filter { playlist.trackIds.contains(it.id) || it.folderName == playlist.name }
+                            }
+
+                            PlaylistDetailSection(
+                                playlist = playlist,
+                                tracks = playlistTracks,
+                                playerState = playerState,
+                                onBack = { activePlaylistDetail = null },
+                                onTrackClick = { track -> onPlayQueue(playlistTracks, track) },
+                                onPlayAll = {
+                                    if (playlistTracks.isNotEmpty()) {
+                                        onPlayQueue(playlistTracks, playlistTracks.first())
+                                    }
+                                },
+                                onShuffleAll = {
+                                    if (playlistTracks.isNotEmpty()) {
+                                        val shuffled = playlistTracks.shuffled()
+                                        onPlayQueue(shuffled, shuffled.first())
+                                    }
+                                },
+                                onMoreClick = onOpenTrackOptions,
+                            )
+                        } else {
+                            // Playlists overview
+                            PlaylistsSection(
+                                folderPlaylists = folderPlaylists,
+                                customPlaylists = customPlaylists,
+                                localTracksCount = localTracks.size,
+                                favoritesCount = favoriteTracks.size,
+                                onSelectDownloaded = { selectedTab = "Downloaded" },
+                                onSelectFavorites = { selectedTab = "Favorites" },
+                                onSelectPlaylist = { playlist -> activePlaylistDetail = playlist },
+                                onCreatePlaylist = { name ->
+                                    val created = libraryStorage.createPlaylist(name)
+                                    customPlaylists = libraryStorage.getCustomPlaylists()
+                                    activePlaylistDetail = created
+                                },
+                                onDeleteCustomPlaylist = { playlistId ->
+                                    libraryStorage.deletePlaylist(playlistId)
+                                    customPlaylists = libraryStorage.getCustomPlaylists()
+                                },
+                            )
+                        }
                     }
                 }
             }

@@ -43,6 +43,7 @@ import androidx.compose.ui.unit.sp
 import com.lunify.domain.model.PlayerState
 import com.lunify.domain.model.RepeatMode
 import com.lunify.domain.model.SyncedLyrics
+import com.lunify.domain.model.Track
 import com.lunify.ui.components.AmbientThemeGlow
 import com.lunify.ui.components.LiquidGlassContainer
 import com.lunify.ui.components.LucideIcon
@@ -93,6 +94,7 @@ fun FullscreenPlayer(
     onToggleLyrics: () -> Unit,
     onOpenQueue: () -> Unit,
     onOpenDuo: () -> Unit,
+    onOpenTrackOptions: (Track) -> Unit = {},
     showLyrics: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
@@ -153,12 +155,12 @@ fun FullscreenPlayer(
                 }
 
                 LucideIconButton(
-                    iconRes = LucideIcons.Radio,
-                    contentDescription = "Start Radio",
-                    onClick = { /* Start instant radio for this track */ },
+                    iconRes = LucideIcons.MoreVertical,
+                    contentDescription = "Track options",
+                    onClick = { onOpenTrackOptions(track) },
                     iconSize = 22.dp,
                     buttonSize = 44.dp,
-                    tint = TextSecondary,
+                    tint = TextPrimary,
                 )
             }
 

@@ -1,5 +1,7 @@
 package com.lunify.ui.navigation
 
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
@@ -59,10 +61,42 @@ fun AppNavigationGraph(
         navController = navController,
         startDestination = NavRoute.HOME,
         modifier = modifier,
-        enterTransition = { fadeIn() + slideInHorizontally { it / 3 } },
-        exitTransition = { fadeOut() + slideOutHorizontally { -it / 3 } },
-        popEnterTransition = { fadeIn() + slideInHorizontally { -it / 3 } },
-        popExitTransition = { fadeOut() + slideOutHorizontally { it / 3 } },
+        enterTransition = {
+            val fromIndex = getRouteIndex(initialState.destination.route)
+            val toIndex = getRouteIndex(targetState.destination.route)
+            val direction = if (toIndex >= fromIndex) 1 else -1
+            slideInHorizontally(
+                animationSpec = tween(340, easing = FastOutSlowInEasing),
+                initialOffsetX = { fullWidth -> fullWidth * direction },
+            ) + fadeIn(animationSpec = tween(340))
+        },
+        exitTransition = {
+            val fromIndex = getRouteIndex(initialState.destination.route)
+            val toIndex = getRouteIndex(targetState.destination.route)
+            val direction = if (toIndex >= fromIndex) -1 else 1
+            slideOutHorizontally(
+                animationSpec = tween(340, easing = FastOutSlowInEasing),
+                targetOffsetX = { fullWidth -> fullWidth * direction },
+            ) + fadeOut(animationSpec = tween(340))
+        },
+        popEnterTransition = {
+            val fromIndex = getRouteIndex(initialState.destination.route)
+            val toIndex = getRouteIndex(targetState.destination.route)
+            val direction = if (toIndex >= fromIndex) 1 else -1
+            slideInHorizontally(
+                animationSpec = tween(340, easing = FastOutSlowInEasing),
+                initialOffsetX = { fullWidth -> fullWidth * direction },
+            ) + fadeIn(animationSpec = tween(340))
+        },
+        popExitTransition = {
+            val fromIndex = getRouteIndex(initialState.destination.route)
+            val toIndex = getRouteIndex(targetState.destination.route)
+            val direction = if (toIndex >= fromIndex) -1 else 1
+            slideOutHorizontally(
+                animationSpec = tween(340, easing = FastOutSlowInEasing),
+                targetOffsetX = { fullWidth -> fullWidth * direction },
+            ) + fadeOut(animationSpec = tween(340))
+        },
     ) {
         composable(NavRoute.HOME) {
             HomeScreen(
@@ -110,5 +144,21 @@ fun AppNavigationGraph(
                 onBack = { navController.popBackStack() },
             )
         }
+    }
+}
+
+/**
+ * Returns a linear index for primary navigation routes to determine directional swipe animations.
+ * When navigating to a higher index, screens slide from right to left; when navigating to a lower
+ * index, screens slide from left to right.
+ */
+private fun getRouteIndex(route: String?): Int {
+    return when (route) {
+        NavRoute.HOME -> 0
+        NavRoute.LIBRARY -> 1
+        NavRoute.SEARCH -> 2
+        NavRoute.DUO -> 3
+        NavRoute.SETTINGS -> 4
+        else -> 0
     }
 }

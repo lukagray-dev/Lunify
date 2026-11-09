@@ -56,7 +56,7 @@ fun SearchFilterChips(
         items(SearchCategories) { category ->
             val isSelected = category.equals(selectedCategory, ignoreCase = true)
             val animatedBgColor by animateColorAsState(
-                targetValue = if (isSelected) AccentCyan else GlassPill,
+                targetValue = if (isSelected) Color.White else GlassPill,
                 animationSpec = spring(),
                 label = "searchFilterBg",
             )

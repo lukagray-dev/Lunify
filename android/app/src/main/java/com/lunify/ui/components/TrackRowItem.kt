@@ -129,26 +129,13 @@ fun TrackRowItem(
 
             Spacer(modifier = Modifier.height(2.dp))
 
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                // Offline downloaded pill badge
-                if (track.isDownloaded) {
-                    LucideIcon(
-                        iconRes = LucideIcons.Check,
-                        contentDescription = "Offline ready",
-                        size = 12.dp,
-                        tint = Color.White,
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                }
-
-                Text(
-                    text = "${track.artist} • ${track.formattedDuration()}",
-                    color = TextSecondary,
-                    fontSize = 12.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
+            Text(
+                text = "${track.artist} • ${track.formattedDuration()}",
+                color = TextSecondary,
+                fontSize = 12.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
 
         Spacer(modifier = Modifier.width(8.dp))

@@ -253,6 +253,7 @@ fun LunifyApp(
                 onToggleLyrics = { showLyrics = !showLyrics },
                 onOpenQueue = { showQueue = true },
                 onOpenDuo = { showDuoSheet = true },
+                onOpenTrackOptions = { track -> trackForOptions = track },
                 showLyrics = showLyrics,
             )
         }
