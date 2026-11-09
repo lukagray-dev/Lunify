@@ -39,9 +39,13 @@ data class Track(
     val isVideo: Boolean = false,
     val isDownloaded: Boolean = false,
     val isFavorite: Boolean = false,
+    val contentUri: String = "",
+    val sizeBytes: Long = 0L,
 ) {
     /**
      * Formats duration milliseconds into "m:ss" format for clean display.
+     * If durationText is already provided, it uses it directly; otherwise it
+     * computes minutes and seconds from milliseconds.
      */
     fun formattedDuration(): String {
         if (durationText.isNotEmpty() && durationText != "0:00") {
@@ -53,6 +57,28 @@ data class Track(
         return "%d:%02d".format(minutes, seconds)
     }
 }
+
+/**
+ * Indicates where a song was played from, so we can tag history items
+ * and distinguish offline local device tracks from online streaming tracks.
+ */
+enum class PlaybackSource {
+    OFFLINE,
+    ONLINE,
+}
+
+/**
+ * Represents an entry in the user's persistent playback history.
+ *
+ * @property track The song that was played.
+ * @property playedAtTimestamp Epoch milliseconds when playback occurred.
+ * @property source Tags whether this was played from local storage (OFFLINE) or streamed (ONLINE).
+ */
+data class HistoryItem(
+    val track: Track,
+    val playedAtTimestamp: Long = System.currentTimeMillis(),
+    val source: PlaybackSource = if (track.isDownloaded) PlaybackSource.OFFLINE else PlaybackSource.ONLINE,
+)
 
 /**
  * Represents a music album or single release.

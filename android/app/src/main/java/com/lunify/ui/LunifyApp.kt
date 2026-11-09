@@ -13,12 +13,10 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -29,14 +27,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import com.lunify.domain.model.Album
+import com.lunify.data.local.LibraryStorage
+import com.lunify.data.repository.LocalAudioRepository
 import com.lunify.domain.model.LyricLine
-import com.lunify.domain.model.PlaybackProgress
-import com.lunify.domain.model.PlayerState
-import com.lunify.domain.model.PlayerStatus
-import com.lunify.domain.model.RepeatMode
 import com.lunify.domain.model.SyncedLyrics
 import com.lunify.domain.model.Track
+import com.lunify.player.AudioPlayerManager
 import com.lunify.ui.components.AppBottomNavigationBar
 import com.lunify.ui.duo.DuoSheet
 import com.lunify.ui.navigation.AppNavigationGraph
@@ -45,7 +41,6 @@ import com.lunify.ui.player.FullscreenPlayer
 import com.lunify.ui.player.MiniPlayer
 import com.lunify.ui.player.QueueSheet
 import com.lunify.ui.theme.ObsidianBackground
-import kotlinx.coroutines.delay
 
 /**
  * ==============================================================================
@@ -56,25 +51,28 @@ import kotlinx.coroutines.delay
  *
  * It manages:
  * 1. Global Navigation State: Tracks active destination and handles tab switching.
- * 2. Active Playback Session:
- *    - Automatically shows the floating MiniPlayer when a song starts playing.
- *    - Drives the real-time position clock tick.
- *    - Handles next, previous, play, pause, and seeking.
- * 3. Fullscreen Now Playing Overlay:
- *    - Smoothly slides up from the bottom when the MiniPlayer is clicked.
- *    - Seamlessly displays synced Apple Music style lyrics.
- * 4. Queue Drawer:
- *    - Allows inspecting and managing upcoming songs.
+ * 2. Real Audio Playback Integration:
+ *    - Connects directly to [AudioPlayerManager], which wraps Media3 ExoPlayer.
+ *    - Both the floating MiniPlayer and FullscreenPlayer share real-time state.
+ *    - Implements precise Previous button logic (> 3s restart vs <= 3s previous track).
+ * 3. Offline Library & Storage Integration:
+ *    - Passes [LibraryStorage] and [LocalAudioRepository] down to the library graph.
+ * 4. Fullscreen Now Playing Overlay & Modal Sheets (Queue & Duo).
  * ==============================================================================
  */
 
 @Composable
-fun LunifyApp(modifier: Modifier = Modifier) {
+fun LunifyApp(
+    audioPlayerManager: AudioPlayerManager,
+    libraryStorage: LibraryStorage,
+    localAudioRepository: LocalAudioRepository,
+    modifier: Modifier = Modifier,
+) {
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route ?: NavRoute.HOME
 
-    // Sample initial queue for instant testability
+    // Sample initial demo queue for instant exploration if player queue is empty
     val initialQueue = remember {
         listOf(
             Track("t1", "Midnight City", "M83", "Hurry Up, We're Dreaming", "4:04", 244000L),
@@ -105,83 +103,55 @@ fun LunifyApp(modifier: Modifier = Modifier) {
         )
     }
 
-    // Master UI Playback State
-    var currentIndex by remember { mutableIntStateOf(0) }
-    var playerStatus by remember { mutableStateOf(PlayerStatus.PLAYING) }
-    var currentPositionMs by remember { mutableLongStateOf(14000L) }
-    var isShuffle by remember { mutableStateOf(false) }
-    var repeatMode by remember { mutableStateOf(RepeatMode.OFF) }
+    // Reactive single source of truth for playback state
+    val playerState by audioPlayerManager.playerState.collectAsState()
+
+    // Initialize queue with initial tracks if empty
+    LaunchedEffect(Unit) {
+        if (playerState.queue.isEmpty()) {
+            audioPlayerManager.setQueue(initialQueue, 0)
+        }
+    }
+
     var isPlayerExpanded by remember { mutableStateOf(false) }
     var showLyrics by remember { mutableStateOf(false) }
     var showQueue by remember { mutableStateOf(false) }
     var showDuoSheet by remember { mutableStateOf(false) }
     var isMiniPlayerDismissed by remember { mutableStateOf(false) }
 
-    val currentTrack = initialQueue.getOrNull(currentIndex)
-    val totalDurationMs = currentTrack?.durationMs ?: 244000L
-
-    val playerState = PlayerState(
-        currentTrack = currentTrack,
-        status = playerStatus,
-        progress = PlaybackProgress(
-            currentPositionMs = currentPositionMs,
-            totalDurationMs = totalDurationMs,
-            bufferedPositionMs = (totalDurationMs * 0.7f).toLong(),
-        ),
-        queue = initialQueue,
-        currentIndex = currentIndex,
-        isShuffle = isShuffle,
-        repeatMode = repeatMode,
-    )
-
-    // Background playback clock simulator: advances timestamp smoothly when playing
-    LaunchedEffect(playerStatus) {
-        while (playerStatus == PlayerStatus.PLAYING) {
-            delay(500)
-            if (currentPositionMs + 500L < totalDurationMs) {
-                currentPositionMs += 500L
-            } else {
-                // Loop or advance to next track
-                if (currentIndex + 1 < initialQueue.size) {
-                    currentIndex++
-                    currentPositionMs = 0L
-                } else {
-                    currentPositionMs = 0L
-                    playerStatus = PlayerStatus.PAUSED
-                }
-            }
-        }
-    }
-
     Box(
         modifier = modifier
             .fillMaxSize()
             .background(ObsidianBackground),
     ) {
+        // ----------------------------------------------------------------------
         // 1. Primary Navigation Host (Home, Search, Library, Settings)
+        // ----------------------------------------------------------------------
         AppNavigationGraph(
             navController = navController,
             playerState = playerState,
             onTrackSelect = { track ->
                 isMiniPlayerDismissed = false
-                val idx = initialQueue.indexOfFirst { it.id == track.id }
-                if (idx != -1) {
-                    currentIndex = idx
-                    currentPositionMs = 0L
-                    playerStatus = PlayerStatus.PLAYING
-                }
+                audioPlayerManager.playTrack(track)
+            },
+            onPlayQueue = { queue, track ->
+                isMiniPlayerDismissed = false
+                audioPlayerManager.playTrack(track, queue)
             },
             onAlbumSelect = { album ->
                 isMiniPlayerDismissed = false
-                currentIndex = 0
-                currentPositionMs = 0L
-                playerStatus = PlayerStatus.PLAYING
+                if (playerState.queue.isNotEmpty()) {
+                    audioPlayerManager.playTrack(playerState.queue.first())
+                }
             },
             onOpenDuo = { showDuoSheet = true },
+            libraryStorage = libraryStorage,
+            localAudioRepository = localAudioRepository,
         )
 
+        // ----------------------------------------------------------------------
         // 2. Progressive Dissolve Scrim behind Bottom Dock
-        // Softens and dissolves items as they scroll into the bottom zone behind the floating glass dock
+        // ----------------------------------------------------------------------
         if (!isPlayerExpanded && !showQueue && !showDuoSheet) {
             Box(
                 modifier = Modifier
@@ -200,8 +170,9 @@ fun LunifyApp(modifier: Modifier = Modifier) {
             )
         }
 
+        // ----------------------------------------------------------------------
         // 3. Floating Bottom Dock (MiniPlayer + Floating Bottom Bar)
-        // Hidden when FullscreenPlayer is expanded or when modal sheets (Queue, Duo) are open
+        // ----------------------------------------------------------------------
         if (!isPlayerExpanded && !showQueue && !showDuoSheet) {
             Column(
                 modifier = Modifier
@@ -217,19 +188,13 @@ fun LunifyApp(modifier: Modifier = Modifier) {
                     MiniPlayer(
                         playerState = playerState,
                         onExpand = { isPlayerExpanded = true },
-                        onTogglePlayPause = {
-                            playerStatus = if (playerState.isPlaying) PlayerStatus.PAUSED else PlayerStatus.PLAYING
-                        },
-                        onNext = {
-                            if (currentIndex + 1 < initialQueue.size) {
-                                currentIndex++
-                                currentPositionMs = 0L
-                                playerStatus = PlayerStatus.PLAYING
-                            }
-                        },
+                        onTogglePlayPause = { audioPlayerManager.togglePlayPause() },
+                        onNext = { audioPlayerManager.playNext() },
                         onClose = {
                             isMiniPlayerDismissed = true
-                            playerStatus = PlayerStatus.PAUSED
+                            if (playerState.isPlaying) {
+                                audioPlayerManager.togglePlayPause()
+                            }
                         },
                     )
                 }
@@ -252,7 +217,9 @@ fun LunifyApp(modifier: Modifier = Modifier) {
             }
         }
 
-        // 3. Fullscreen Now Playing Overlay
+        // ----------------------------------------------------------------------
+        // 4. Fullscreen Now Playing Overlay
+        // ----------------------------------------------------------------------
         AnimatedVisibility(
             visible = isPlayerExpanded,
             enter = slideInVertically { it } + fadeIn(),
@@ -262,36 +229,16 @@ fun LunifyApp(modifier: Modifier = Modifier) {
                 playerState = playerState,
                 lyrics = sampleLyrics,
                 onCollapse = { isPlayerExpanded = false },
-                onTogglePlayPause = {
-                    playerStatus = if (playerState.isPlaying) PlayerStatus.PAUSED else PlayerStatus.PLAYING
-                },
-                onPrevious = {
-                    if (currentIndex > 0) {
-                        currentIndex--
-                        currentPositionMs = 0L
-                    } else {
-                        currentPositionMs = 0L
-                    }
-                },
-                onNext = {
-                    if (currentIndex + 1 < initialQueue.size) {
-                        currentIndex++
-                        currentPositionMs = 0L
-                    }
-                },
-                onSeek = { targetMs ->
-                    currentPositionMs = targetMs
-                },
-                onToggleShuffle = { isShuffle = !isShuffle },
-                onToggleRepeat = {
-                    repeatMode = when (repeatMode) {
-                        RepeatMode.OFF -> RepeatMode.ALL
-                        RepeatMode.ALL -> RepeatMode.ONE
-                        RepeatMode.ONE -> RepeatMode.OFF
-                    }
-                },
+                onTogglePlayPause = { audioPlayerManager.togglePlayPause() },
+                onPrevious = { audioPlayerManager.playPrevious() },
+                onNext = { audioPlayerManager.playNext() },
+                onSeek = { targetMs -> audioPlayerManager.seekTo(targetMs) },
+                onToggleShuffle = { audioPlayerManager.toggleShuffle() },
+                onToggleRepeat = { audioPlayerManager.toggleRepeat() },
                 onToggleFavorite = {
-                    // Toggle favorite state
+                    playerState.currentTrack?.let { track ->
+                        audioPlayerManager.toggleFavorite(track)
+                    }
                 },
                 onToggleLyrics = { showLyrics = !showLyrics },
                 onOpenQueue = { showQueue = true },
@@ -313,7 +260,9 @@ fun LunifyApp(modifier: Modifier = Modifier) {
             )
         }
 
-        // 4. Sliding Up-Next Queue Drawer Overlay
+        // ----------------------------------------------------------------------
+        // 5. Sliding Up-Next Queue Drawer Overlay
+        // ----------------------------------------------------------------------
         AnimatedVisibility(
             visible = showQueue,
             enter = slideInVertically { it } + fadeIn(),
@@ -321,13 +270,14 @@ fun LunifyApp(modifier: Modifier = Modifier) {
             modifier = Modifier.align(Alignment.BottomCenter),
         ) {
             QueueSheet(
-                queue = initialQueue,
-                currentIndex = currentIndex,
+                queue = playerState.queue,
+                currentIndex = playerState.currentIndex,
                 onTrackClick = { index ->
-                    isMiniPlayerDismissed = false
-                    currentIndex = index
-                    currentPositionMs = 0L
-                    playerStatus = PlayerStatus.PLAYING
+                    val clickedTrack = playerState.queue.getOrNull(index)
+                    if (clickedTrack != null) {
+                        isMiniPlayerDismissed = false
+                        audioPlayerManager.playTrack(clickedTrack)
+                    }
                     showQueue = false
                 },
                 onClose = { showQueue = false },
@@ -335,7 +285,9 @@ fun LunifyApp(modifier: Modifier = Modifier) {
             )
         }
 
-        // 5. Sliding Duo Pop-up Sheet Overlay
+        // ----------------------------------------------------------------------
+        // 6. Sliding Duo Pop-up Sheet Overlay
+        // ----------------------------------------------------------------------
         AnimatedVisibility(
             visible = showDuoSheet,
             enter = slideInVertically { it } + fadeIn(),
@@ -346,12 +298,7 @@ fun LunifyApp(modifier: Modifier = Modifier) {
                 playerState = playerState,
                 onTrackSelect = { track ->
                     isMiniPlayerDismissed = false
-                    val idx = initialQueue.indexOfFirst { it.id == track.id }
-                    if (idx != -1) {
-                        currentIndex = idx
-                        currentPositionMs = 0L
-                        playerStatus = PlayerStatus.PLAYING
-                    }
+                    audioPlayerManager.playTrack(track)
                     showDuoSheet = false
                 },
                 onClose = { showDuoSheet = false },

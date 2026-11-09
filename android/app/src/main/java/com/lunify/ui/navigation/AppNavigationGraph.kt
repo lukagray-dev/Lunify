@@ -9,6 +9,8 @@ import androidx.compose.ui.Modifier
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import com.lunify.data.local.LibraryStorage
+import com.lunify.data.repository.LocalAudioRepository
 import com.lunify.domain.model.Album
 import com.lunify.domain.model.PlayerState
 import com.lunify.domain.model.Track
@@ -26,7 +28,7 @@ import com.lunify.ui.settings.SettingsScreen
  * Hey friend! This composable manages transitions between all primary stages:
  * - Home discovery
  * - Search catalog
- * - Offline library
+ * - Offline library (with real device storage & playback)
  * - Duo synchronization room
  * - Settings
  *
@@ -39,8 +41,11 @@ fun AppNavigationGraph(
     navController: NavHostController,
     playerState: PlayerState,
     onTrackSelect: (Track) -> Unit,
+    onPlayQueue: (List<Track>, Track) -> Unit,
     onAlbumSelect: (Album) -> Unit,
     onOpenDuo: () -> Unit,
+    libraryStorage: LibraryStorage,
+    localAudioRepository: LocalAudioRepository,
     modifier: Modifier = Modifier,
 ) {
     NavHost(
@@ -73,6 +78,9 @@ fun AppNavigationGraph(
             LibraryScreen(
                 playerState = playerState,
                 onTrackSelect = onTrackSelect,
+                onPlayQueue = onPlayQueue,
+                libraryStorage = libraryStorage,
+                localAudioRepository = localAudioRepository,
             )
         }
 
