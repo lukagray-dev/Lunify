@@ -1,51 +1,61 @@
 <div align="center">
 
-<img src="assets\logo.svg" alt="Lunify Logo" width="120" height="120" />
+<img src="assets/logo.svg" alt="Lunify Logo" width="120" height="120" />
 
 # **Lunify**
 
+### *A modern, ad-free YouTube Music client & offline audio player for Android.*
+
+Inspired by **[SimpMusic](https://github.com/maxrave-dev/SimpMusic)**.
+
 </div>
+
+---
 
 ## **What is Lunify?**
 
-Lunify is an all-in-one media player and downloader for Android. It plays your local files, downloads content from the internet, streams live previews without ads, and lets you and your partner listen to the same playlist together in perfect sync (no matter how far apart you are).
+**Lunify** is an unofficial YouTube Music client and offline music player built with Jetpack Compose and Android Media3 (ExoPlayer). It allows you to discover and stream high-quality audio directly from YouTube Music without advertisements or subscription limits, manage and play your local audio library, download songs for offline playback, and listen in real-time sync with someone special via **Duo**.
 
-> ***One app. No subscriptions. No limitations.***
+> ***Pure music streaming. No ads. No subscriptions. No distractions.***
 
-<details>
-<summary><span style="font-size: 1.5em;">⚡ Features</span></summary>
+---
 
-### Offline Player
+## Features
 
-Play virtually any audio or video file stored on your device. Lunify supports all major formats — MP3, FLAC, AAC, MP4, MKV, and more — with a clean, intuitive interface that gets out of your way.
+### Ad-Free YouTube Music Streaming
+- **Native InnerTube Integration**: Fast, ad-free music search, query suggestions, and browsing for songs, albums, and artists.
+- **Dynamic Home Discovery**: Instant Quick Picks, trending releases, community playlists, and top artist discographies.
+- **Infinite Radio & Auto-Queue**: Automatically fetches and appends related radio tracks when your current queue finishes.
 
-### Downloader
+### High-Fidelity Audio Extraction & Smart Caching
+- **Fast Stream Resolution**: Ultra-fast stream extraction powered by PipePipeExtractor, selecting the highest-bitrate audio streams available.
+- **Media3 LRU Cache**: 250MB local disk cache for seamless instant re-playback and reduced bandwidth consumption.
 
-Download music, videos, and entire playlists from YouTube and 1000+ other DRM-free websites. Lunify uses **yt-dlp** as its bundled download engine, and updates are handled through app releases instead of an in-app upgrade screen.
+### Synchronized Lyrics
+- **Real-Time Word/Line Sync**: Synchronized time-stamped lyrics sourced online via [LRCLIB](https://lrclib.net).
+- **Offline Companion Support**: Automatic detection and loading of companion `.lrc` files located alongside local tracks.
 
-> Supports audio-only downloads, video downloads, full playlist queuing — basically everything.
+### Offline Music Player
+- **MediaStore Audio Discovery**: Automatically discovers and indexes all audio tracks stored on your device (MP3, FLAC, M4A, AAC, WAV, OGG).
+- **Folder Playlists**: Automatically detects music folders as playlists for backward compatibility with manual music libraries.
+- **Smart Sorting**: Sort downloaded songs by Name, Date Added, Times Played, or Duration.
+- **Real-Time Storage Monitor**: Displays exact storage space consumed by your downloaded music files.
 
-### Live Preview
+### Direct Music Downloader
+- **One-Tap Offline Download**: Download any online music track directly to your device's music storage for offline listening anytime.
 
-> Will be written
+### Duo — Listen Together
+- **The marquee differentiator**: Listen to the same playlist in perfect real-time synchronization with another person, no matter where you are.
+- **Long-Distance Sync (Online)**: Low-latency P2P playback sync over WebRTC DataChannels.
+- **Offline / Nearby Sync**: Local connection via Wi-Fi Direct with zero internet or mobile data required.
 
-### **Duo — Listen Together**
+### Liquid Glass Design System
+- Modern frosted glass interface built with pure Jetpack Compose.
+- Dynamic ambient glow reflecting album artwork colors.
+- Floating MiniPlayer with pull-down dismissal gesture.
+- Immersive Fullscreen Player with synced seek bar, up next queue sheet, and smooth screen transitions.
 
-> *The feature that makes Lunify different from everyone.*
-
-**Duo** lets two people stay in sync with the same playlist, no matter where they are in the world. Install *Lunify* on both devices, have the same playlist downloaded, connect — and enjoy together.
-
-- **Long-distance sync** via WebRTC. Both devices stay perfectly in time over the internet.
-- **Offline / nearby sync** via Wi-Fi Direct. No internet needed — works even without a data connection if you're in the same room or building.
-
-<div align="center">
-
-***Whether you're in different cities or sitting on the same couch,***  
-***Duo keeps you in the same moment.***
-
-</div>
-
-</details>
+---
 
 ## Getting Started
 
@@ -55,11 +65,19 @@ Pre-release binaries are available for testing. You can download the latest sign
 2. Download the `lunify-v0.1.0-alpha.1.apk` asset.
 3. Open and install the APK on your Android device (ensure installation from unknown sources is allowed in your device settings).
 
-## Supported Sources
+---
 
-Lunify's downloader works with any site supported by the current yt-dlp build. This includes YouTube, SoundCloud, Vimeo, and hundreds more. *DRM-protected content is not supported.*
+## Tech Stack & Open-Source Acknowledgments
 
-For a full list of supported sites, refer to the [yt-dlp supported sites list](https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md).
+Lunify is built with modern Android architecture and is deeply inspired by:
+
+- **[SimpMusic](https://github.com/maxrave-dev/SimpMusic)** — For architectural inspiration and demonstration of unofficial YouTube Music streaming.
+- **[PipePipeExtractor](https://github.com/maxrave-dev/PipePipeExtractor)** — High-performance YouTube audio stream extraction.
+- **[LRCLIB](https://lrclib.net)** — Synchronized lyrics API provider.
+- **[AndroidX Media3 ExoPlayer](https://developer.android.com/media/media3)** — Reliable audio playback engine and stream caching.
+- **[Jetpack Compose](https://developer.android.com/jetpack/compose)** — Declarative Android UI and custom Liquid Glass canvas rendering.
+
+---
 
 ## Contributing
 
@@ -70,6 +88,8 @@ Pull requests are welcome. For major changes, open an issue first to discuss wha
 3. Commit your changes: `git commit -m 'Add your feature'`
 4. Push and open a Pull Request
 
+---
+
 ## License
 
 Lunify is licensed under the **GNU Affero General Public License v3.0 (AGPLv3)**. See [LICENSE](./LICENSE) for full terms.
@@ -78,6 +98,6 @@ Lunify is licensed under the **GNU Affero General Public License v3.0 (AGPLv3)**
 
 <div align="center">
 
-***Made with ❤️ for music lovers and the people they miss.***
+***Made with passion for music lovers and the people they miss.***
 
 </div>
