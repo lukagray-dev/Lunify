@@ -24,6 +24,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.navigation.compose.currentBackStackEntryAsState
@@ -114,6 +115,7 @@ fun LunifyApp(modifier: Modifier = Modifier) {
     var showLyrics by remember { mutableStateOf(false) }
     var showQueue by remember { mutableStateOf(false) }
     var showDuoSheet by remember { mutableStateOf(false) }
+    var isMiniPlayerDismissed by remember { mutableStateOf(false) }
 
     val currentTrack = initialQueue.getOrNull(currentIndex)
     val totalDurationMs = currentTrack?.durationMs ?: 244000L
@@ -161,6 +163,7 @@ fun LunifyApp(modifier: Modifier = Modifier) {
             navController = navController,
             playerState = playerState,
             onTrackSelect = { track ->
+                isMiniPlayerDismissed = false
                 val idx = initialQueue.indexOfFirst { it.id == track.id }
                 if (idx != -1) {
                     currentIndex = idx
@@ -169,7 +172,7 @@ fun LunifyApp(modifier: Modifier = Modifier) {
                 }
             },
             onAlbumSelect = { album ->
-                // Navigate into album detail or play first track
+                isMiniPlayerDismissed = false
                 currentIndex = 0
                 currentPositionMs = 0L
                 playerStatus = PlayerStatus.PLAYING
@@ -177,7 +180,27 @@ fun LunifyApp(modifier: Modifier = Modifier) {
             onOpenDuo = { showDuoSheet = true },
         )
 
-        // 2. Floating Bottom Dock (MiniPlayer + Floating Bottom Bar)
+        // 2. Progressive Dissolve Scrim behind Bottom Dock
+        // Softens and dissolves items as they scroll into the bottom zone behind the floating glass dock
+        if (!isPlayerExpanded && !showQueue && !showDuoSheet) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .height(200.dp)
+                    .background(
+                        brush = Brush.verticalGradient(
+                            colors = listOf(
+                                Color.Transparent,
+                                ObsidianBackground.copy(alpha = 0.55f),
+                                ObsidianBackground.copy(alpha = 0.92f),
+                            ),
+                        ),
+                    ),
+            )
+        }
+
+        // 3. Floating Bottom Dock (MiniPlayer + Floating Bottom Bar)
         // Hidden when FullscreenPlayer is expanded or when modal sheets (Queue, Duo) are open
         if (!isPlayerExpanded && !showQueue && !showDuoSheet) {
             Column(
@@ -185,8 +208,12 @@ fun LunifyApp(modifier: Modifier = Modifier) {
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth(),
             ) {
-                // Floating MiniPlayer (appears whenever a song is loaded)
-                if (playerState.hasTrack) {
+                // Floating MiniPlayer with pull-down-to-dismiss gesture
+                AnimatedVisibility(
+                    visible = playerState.hasTrack && !isMiniPlayerDismissed,
+                    enter = slideInVertically { it } + fadeIn(),
+                    exit = slideOutVertically { it } + fadeOut(),
+                ) {
                     MiniPlayer(
                         playerState = playerState,
                         onExpand = { isPlayerExpanded = true },
@@ -200,9 +227,14 @@ fun LunifyApp(modifier: Modifier = Modifier) {
                                 playerStatus = PlayerStatus.PLAYING
                             }
                         },
+                        onClose = {
+                            isMiniPlayerDismissed = true
+                            playerStatus = PlayerStatus.PAUSED
+                        },
                     )
-                    Spacer(modifier = Modifier.height(4.dp))
                 }
+
+                Spacer(modifier = Modifier.height(4.dp))
 
                 // Floating Navigation Bar (Capsule + Search FAB)
                 AppBottomNavigationBar(
@@ -292,6 +324,7 @@ fun LunifyApp(modifier: Modifier = Modifier) {
                 queue = initialQueue,
                 currentIndex = currentIndex,
                 onTrackClick = { index ->
+                    isMiniPlayerDismissed = false
                     currentIndex = index
                     currentPositionMs = 0L
                     playerStatus = PlayerStatus.PLAYING
@@ -312,6 +345,7 @@ fun LunifyApp(modifier: Modifier = Modifier) {
             DuoSheet(
                 playerState = playerState,
                 onTrackSelect = { track ->
+                    isMiniPlayerDismissed = false
                     val idx = initialQueue.indexOfFirst { it.id == track.id }
                     if (idx != -1) {
                         currentIndex = idx

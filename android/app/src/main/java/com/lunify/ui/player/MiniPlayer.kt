@@ -1,9 +1,15 @@
 package com.lunify.ui.player
 
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -12,6 +18,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -21,15 +28,20 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlin.math.roundToInt
 import com.lunify.domain.model.PlayerState
 import com.lunify.ui.components.LucideIcon
 import com.lunify.ui.components.LucideIconButton
@@ -66,14 +78,42 @@ fun MiniPlayer(
     onExpand: () -> Unit,
     onTogglePlayPause: () -> Unit,
     onNext: () -> Unit,
+    onClose: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val track = playerState.currentTrack ?: return
     val interactionSource = remember { MutableInteractionSource() }
 
+    // Interactive pull-down-to-dismiss gesture state
+    var dragOffsetY by remember { mutableFloatStateOf(0f) }
+    val animatedOffsetY by animateFloatAsState(
+        targetValue = dragOffsetY,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMediumLow,
+        ),
+        label = "miniPlayerDragOffset",
+    )
+
     Box(
         modifier = modifier
             .fillMaxWidth()
+            .offset { IntOffset(x = 0, y = animatedOffsetY.roundToInt()) }
+            .draggable(
+                orientation = Orientation.Vertical,
+                state = rememberDraggableState { delta ->
+                    // Only allow downward pulling (positive delta)
+                    val newOffset = dragOffsetY + delta
+                    dragOffsetY = if (newOffset > 0f) newOffset else 0f
+                },
+                onDragStopped = { velocity ->
+                    // Pulling down past threshold (90px) or fast downward flick triggers dismissal
+                    if (dragOffsetY > 90f || velocity > 500f) {
+                        onClose()
+                    }
+                    dragOffsetY = 0f
+                },
+            )
             .padding(horizontal = 16.dp)
             .liquidGlass(
                 shape = RoundedCornerShape(16.dp),
@@ -88,10 +128,21 @@ fun MiniPlayer(
             ),
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
+            // Subtle top drag handle indicating pull-down action
+            Box(
+                modifier = Modifier
+                    .width(32.dp)
+                    .height(3.dp)
+                    .align(Alignment.CenterHorizontally)
+                    .padding(top = 4.dp)
+                    .clip(CircleShape)
+                    .background(Color.White.copy(alpha = 0.22f)),
+            )
+
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 // Track Artwork Thumbnail

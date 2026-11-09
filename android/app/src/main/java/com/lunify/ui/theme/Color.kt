@@ -30,14 +30,14 @@ val ObsidianSurface = Color(0xFF161616)
 val ObsidianSurfaceHigh = Color(0xFF202020)
 val ObsidianSurfaceHighest = Color(0xFF2A2A2A)
 
-// Transparent-ish Liquid Glass Translucencies
-val GlassSurfaceDark = Color(0x40101014)          // ~25% translucent dark obsidian glass
-val GlassSurfaceElevated = Color(0x5916161E)      // ~35% translucent elevated glass (lets cards peek through)
+// Frosted Liquid Glass Translucencies (Rich Obsidian Smokey Glass)
+val GlassSurfaceDark = Color(0xB8101016)          // ~72% deep frosted obsidian glass
+val GlassSurfaceElevated = Color(0xD014141E)      // ~82% dense elevated frosted glass (dissolves background items)
 val GlassSheetBackground = Color(0xF2121216)      // ~95% deep obsidian frosted glass for modal bottom sheets
-val GlassPill = Color(0x33262630)                 // ~20% translucent frosted pill
+val GlassPill = Color(0x66242434)                 // ~40% frosted glass pill
 val GlassPillActive = Color(0xFFFFFFFF)           // Pure White active pill
-val GlassBorderSubtle = Color(0x29FFFFFF)         // 16% crisp white specular outline
-val GlassBorderProminent = Color(0x59FFFFFF)      // 35% white specular rim
+val GlassBorderSubtle = Color(0x3DFFFFFF)         // 24% crisp white specular outline
+val GlassBorderProminent = Color(0x66FFFFFF)      // 40% white specular rim
 val GlassShimmer = Color(0x4DFFFFFF)              // 30% top edge rim reflection
 
 // Monochrome Black & White Accents

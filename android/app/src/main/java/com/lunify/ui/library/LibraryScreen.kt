@@ -188,66 +188,9 @@ fun LibraryScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(14.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
-            // 3. Offline Status Banner Card
-            LiquidGlassContainer(
-                shape = RoundedCornerShape(16.dp),
-                backgroundColor = GlassSurfaceElevated,
-                interactive = false,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            LucideIcon(
-                                iconRes = LucideIcons.Check,
-                                contentDescription = null,
-                                size = 18.dp,
-                                tint = AccentEmerald,
-                            )
-                            Text(
-                                text = "Offline Ready",
-                                color = TextPrimary,
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Bold,
-                            )
-                        }
-
-                        Text(
-                            text = "${downloadedTracks.size} tracks saved",
-                            color = TextMuted,
-                            fontSize = 12.sp,
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    Text(
-                        text = "Downloaded with high-resolution album art & synchronized lyrics. Plays with zero internet connection.",
-                        color = TextSecondary,
-                        fontSize = 12.sp,
-                        lineHeight = 16.sp,
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(14.dp))
-
-            // 4. Downloaded Tracks List
+            // Downloaded Tracks List
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(bottom = 180.dp),

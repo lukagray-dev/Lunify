@@ -82,19 +82,45 @@ fun Modifier.liquidGlass(
         .background(backgroundColor)
         .border(borderWidth, borderBrush, shape)
         .drawWithContent {
-            // 1. Draw subtle top specular sheen for authentic glass realism
+            // 1. Frosted Glass Light Dispersion Layer (Soft diffuse light scatter)
             drawRect(
-                brush = Brush.verticalGradient(
+                brush = Brush.radialGradient(
                     colors = listOf(
-                        Color.White.copy(alpha = 0.08f),
+                        Color.White.copy(alpha = 0.09f),
+                        Color.White.copy(alpha = 0.02f),
                         Color.Transparent,
                     ),
-                    startY = 0f,
-                    endY = size.height * 0.45f,
+                    center = Offset(size.width * 0.3f, size.height * 0.25f),
+                    radius = size.width * 0.75f,
                 ),
             )
 
-            // 2. Draw children content (icons, text, thumbnails) with 100% crisp sharpness
+            // 2. Top Specular Sheen Reflection
+            drawRect(
+                brush = Brush.verticalGradient(
+                    colors = listOf(
+                        Color.White.copy(alpha = 0.14f),
+                        Color.White.copy(alpha = 0.03f),
+                        Color.Transparent,
+                    ),
+                    startY = 0f,
+                    endY = size.height * 0.55f,
+                ),
+            )
+
+            // 3. Subtle Bottom Ambient Counter-Rim Reflection
+            drawRect(
+                brush = Brush.verticalGradient(
+                    colors = listOf(
+                        Color.Transparent,
+                        Color.White.copy(alpha = 0.04f),
+                    ),
+                    startY = size.height * 0.82f,
+                    endY = size.height,
+                ),
+            )
+
+            // 4. Draw children content (icons, text, thumbnails) with 100% crisp sharpness
             drawContent()
         }
 }
