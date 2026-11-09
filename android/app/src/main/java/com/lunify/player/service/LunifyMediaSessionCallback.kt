@@ -114,11 +114,13 @@ class LunifyMediaSessionCallback(
     ): Int {
         Log.d(TAG, "Received player command request: $playerCommand")
         when (playerCommand) {
-            Player.COMMAND_SEEK_TO_NEXT -> {
+            Player.COMMAND_SEEK_TO_NEXT,
+            Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM -> {
                 audioPlayerManager.playNext()
                 return SessionResult.RESULT_SUCCESS
             }
-            Player.COMMAND_SEEK_TO_PREVIOUS -> {
+            Player.COMMAND_SEEK_TO_PREVIOUS,
+            Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM -> {
                 audioPlayerManager.playPrevious()
                 return SessionResult.RESULT_SUCCESS
             }

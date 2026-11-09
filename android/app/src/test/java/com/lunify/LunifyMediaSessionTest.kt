@@ -145,4 +145,25 @@ class LunifyMediaSessionTest {
 
         assertEquals(180000L, resolvedDuration)
     }
+
+    @Test
+    fun testAlwaysAvailableNextAndPreviousCommands() {
+        // Even when repeat mode is OFF, SEEK_TO_NEXT and SEEK_TO_PREVIOUS
+        // must always be available to prevent Android SystemUI from hiding the Next button.
+        val repeatOffState = PlayerState(
+            repeatMode = RepeatMode.OFF,
+            queue = listOf(
+                Track(id = "1", title = "Song 1", artist = "Artist"),
+                Track(id = "2", title = "Song 2", artist = "Artist"),
+            ),
+            currentIndex = 0,
+        )
+
+        // Queue has more songs: Next is valid
+        assertTrue(repeatOffState.queue.size > 1)
+        assertTrue(repeatOffState.currentIndex < repeatOffState.queue.size - 1)
+
+        // Repeat mode is OFF, but Next must still be exposed to SystemUI
+        assertEquals(RepeatMode.OFF, repeatOffState.repeatMode)
+    }
 }

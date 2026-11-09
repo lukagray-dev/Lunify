@@ -106,9 +106,10 @@ class LunifyMediaService : MediaSessionService() {
             CoroutineScope(SupervisorJob() + Dispatchers.IO),
         )
 
-        // 5. Build MediaSession wrapping our ExoPlayer
+        // 5. Wrap ExoPlayer in LunifyForwardingPlayer so COMMAND_SEEK_TO_NEXT is always available to SystemUI
+        val forwardingPlayer = LunifyForwardingPlayer(audioManager.exoPlayer, audioManager)
         val callback = LunifyMediaSessionCallback(audioManager)
-        mediaSession = MediaSession.Builder(this, audioManager.exoPlayer)
+        mediaSession = MediaSession.Builder(this, forwardingPlayer)
             .setId("LunifyMediaSession")
             .setSessionActivity(sessionActivityPendingIntent)
             .setCallback(callback)
