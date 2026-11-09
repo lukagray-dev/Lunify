@@ -1,0 +1,31 @@
+# ==============================================================================
+# Lunify - Official Git Ignore Rules (.gitignore)
+# ==============================================================================
+
+# Android & Gradle
+.gradle/
+**/build/
+build/
+local.properties
+.cxx/
+captures/
+*.apk
+*.aab
+
+# IDEs & Editors
+.idea/
+*.iml
+.vscode/
+
+# Operating Systems
+.DS_Store
+Thumbs.db
+ehthumbs.db
+[Dd]esktop.ini
+
+# Temporary files & Scratch
+*.log
+*.tmp
+*.temp
+.temp/
+*.bak
