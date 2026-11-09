@@ -114,119 +114,12 @@ fun SearchScreen(
                 .fillMaxSize()
                 .statusBarsPadding(),
         ) {
-            // ------------------------------------------------------------------
-            // 1. Header: Symmetrical Brand Icon + Title & Symmetrical 40dp Capsule
-            // ------------------------------------------------------------------
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp, vertical = 12.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                // Left: Icon container + "Search" title
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(36.dp)
-                            .liquidGlass(
-                                shape = CircleShape,
-                                backgroundColor = Color.White.copy(alpha = 0.08f),
-                                interactive = false,
-                            ),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        LucideIcon(
-                            iconRes = LucideIcons.Search,
-                            contentDescription = "Search",
-                            size = 20.dp,
-                            tint = Color.White,
-                        )
-                    }
-
-                    Text(
-                        text = "Search",
-                        color = TextPrimary,
-                        fontSize = 22.sp,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = (-0.5).sp,
-                    )
-                }
-
-                // Right: Symmetrical 40dp Liquid Glass Capsule (Clear action or Mode indicator)
-                if (searchQuery.isNotEmpty()) {
-                    Box(
-                        modifier = Modifier
-                            .height(40.dp)
-                            .liquidGlass(
-                                shape = CircleShape,
-                                backgroundColor = GlassSurfaceElevated,
-                                interactive = true,
-                                borderWidth = 1.dp,
-                            )
-                            .clickable { searchQuery = "" }
-                            .padding(horizontal = 14.dp),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        ) {
-                            LucideIcon(
-                                iconRes = LucideIcons.Close,
-                                contentDescription = "Clear search",
-                                size = 15.dp,
-                                tint = Color.White,
-                            )
-                            Text(
-                                text = "Clear",
-                                color = Color.White,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.SemiBold,
-                            )
-                        }
-                    }
-                } else {
-                    Row(
-                        modifier = Modifier
-                            .height(40.dp)
-                            .liquidGlass(
-                                shape = CircleShape,
-                                backgroundColor = GlassSurfaceElevated,
-                                interactive = false,
-                                borderWidth = 1.dp,
-                            )
-                            .padding(horizontal = 14.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    ) {
-                        LucideIcon(
-                            iconRes = LucideIcons.Sparkles,
-                            contentDescription = null,
-                            size = 15.dp,
-                            tint = Color.White,
-                        )
-                        Text(
-                            text = "Music",
-                            color = Color.White,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                    }
-                }
-            }
-
-            // ------------------------------------------------------------------
-            // 2. Symmetrical Liquid Glass Search Input Bar
-            // ------------------------------------------------------------------
+            // 1. Liquid Glass Search Input Bar (Aligned with chips at horizontal 16.dp)
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 20.dp, vertical = 4.dp)
-                    .height(46.dp)
+                    .padding(horizontal = 16.dp, vertical = 12.dp)
+                    .height(48.dp)
                     .liquidGlass(
                         shape = CircleShape,
                         backgroundColor = GlassSurfaceElevated,
@@ -244,7 +137,7 @@ fun SearchScreen(
                         iconRes = LucideIcons.Search,
                         contentDescription = null,
                         size = 18.dp,
-                        tint = TextSecondary,
+                        tint = Color.White,
                     )
 
                     Spacer(modifier = Modifier.width(12.dp))
@@ -254,7 +147,7 @@ fun SearchScreen(
                             Text(
                                 text = "Search songs, albums, artists...",
                                 color = TextMuted,
-                                fontSize = 13.sp,
+                                fontSize = 14.sp,
                             )
                         }
 
@@ -279,18 +172,15 @@ fun SearchScreen(
                             iconRes = LucideIcons.Close,
                             contentDescription = "Clear search",
                             onClick = { searchQuery = "" },
-                            iconSize = 16.dp,
-                            buttonSize = 32.dp,
+                            iconSize = 18.dp,
+                            buttonSize = 36.dp,
                             tint = TextSecondary,
                         )
                     }
                 }
             }
 
-            // ------------------------------------------------------------------
-            // 3. Category Filter Chips (Matching 16dp horizontal padding & 34dp height)
-            // ------------------------------------------------------------------
-            Spacer(modifier = Modifier.height(10.dp))
+            // 2. Category Filter Chips (Aligned with searchbar at horizontal 16.dp)
             SearchFilterChips(
                 selectedCategory = selectedCategory,
                 onCategorySelected = { selectedCategory = it },
@@ -298,15 +188,13 @@ fun SearchScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // ------------------------------------------------------------------
-            // 4. Search Content (Recent Searches OR Filtered Results)
-            // ------------------------------------------------------------------
+            // 3. Search Content (Recent Searches OR Filtered Results)
             if (searchQuery.isEmpty()) {
                 // Recent / Trending Searches
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 20.dp),
+                        .padding(horizontal = 16.dp),
                 ) {
                     Text(
                         text = "Recent Searches",
