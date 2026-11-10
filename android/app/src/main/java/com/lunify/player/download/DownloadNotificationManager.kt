@@ -86,6 +86,62 @@ open class DownloadNotificationManager(
             val value = bytes.toDouble() / Math.pow(1024.0, digitGroups.toDouble())
             return String.format(Locale.US, "%.1f %s", value, units[digitGroups])
         }
+
+        /**
+         * Checks whether a given progress percentage represents an active, in-progress download.
+         *
+         * WHY IS 100% EXCLUDED HERE?
+         * ---------------------------
+         * When a song finishes downloading (all chunks received), the total progress hits 100%.
+         * If we publish an ongoing progress notification for 100% (with ongoing = true),
+         * it immediately races against [showDownloadComplete]! Due to Android's internal notification
+         * rate limiter and SystemUI coalescing, the notification often gets stuck permanently displaying
+         * "Downloading... 100%" with a frozen progress bar that cannot even be swiped away!
+         *
+         * Therefore, only percentages from 0 to 99 (or -1 for indeterminate streams) are considered
+         * "in-progress". When 100% is reached, the downloader loop exits and hands control directly
+         * over to [showDownloadComplete], guaranteeing a smooth, instant transition.
+         */
+        fun isInProgressDownload(percent: Int): Boolean {
+            return (percent in 0..99) || percent < 0
+        }
+
+        /**
+         * Evaluates whether an active progress notification should be dispatched to NotificationManager.
+         *
+         * WHY DO WE THROTTLE?
+         * -------------------
+         * A high-speed network chunk download might invoke the progress callback hundreds of times
+         * in a second as 16KB buffers arrive. If we called notify() on every single callback:
+         * 1. Android's notification subsystem would drop updates due to strict rate limits.
+         * 2. The main thread / binder IPC would choke and cause visible UI lag.
+         *
+         * Rules for dispatching:
+         * - Percentage must be an in-progress state (0% to 99%, never 100%).
+         * - Percentage must have changed compared to last dispatch.
+         * - If it's the very first progress event (lastNotifiedPercent < 0), dispatch immediately.
+         * - Otherwise, dispatch if percentage increased by at least 2% OR at least 400ms elapsed.
+         */
+        fun shouldDispatchProgressUpdate(
+            currentPercent: Int,
+            lastNotifiedPercent: Int,
+            currentTimeMs: Long,
+            lastNotifiedTimeMs: Long,
+        ): Boolean {
+            // Never dispatch ongoing progress notifications for 100% or above
+            if (currentPercent !in 0..99) return false
+
+            // Do not re-notify if percentage hasn't moved
+            if (currentPercent == lastNotifiedPercent) return false
+
+            // Immediate dispatch for the very first progress tick
+            if (lastNotifiedPercent < 0) return true
+
+            // Dispatch if progress jumped by 2% or more, or if 400ms have passed since last update
+            val percentDelta = currentPercent - lastNotifiedPercent
+            val timeDelta = currentTimeMs - lastNotifiedTimeMs
+            return percentDelta >= 2 || timeDelta >= 400L
+        }
     }
 
     private val notificationManager: NotificationManagerCompat by lazy {
@@ -212,6 +268,15 @@ open class DownloadNotificationManager(
 
         val notificationId = getNotificationId(track.id)
 
+        // Cancel the prior ongoing progress notification first!
+        // This is essential so Android SystemUI fully discards the ongoing progress bar layout
+        // before posting the clean, dismissible "Download completed" notification.
+        try {
+            notificationManager.cancel(notificationId)
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to cancel prior progress notification: ${e.message}")
+        }
+
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_lucide_check)
             .setContentTitle(track.title)
@@ -244,6 +309,13 @@ open class DownloadNotificationManager(
         }
 
         val notificationId = getNotificationId(track.id)
+
+        // Cancel previous ongoing notification so the progress bar is discarded
+        try {
+            notificationManager.cancel(notificationId)
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to cancel prior progress notification: ${e.message}")
+        }
 
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_lucide_close)

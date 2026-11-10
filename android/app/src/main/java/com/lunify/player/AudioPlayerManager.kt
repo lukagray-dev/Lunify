@@ -411,12 +411,11 @@ class AudioPlayerManager(
                     onlineRepository.getAudioStreamUrl(track.id).getOrThrow()
                 }
 
-                // 2. Prepare destination file in app's external music directory
-                val baseDir = context.getExternalFilesDir(Environment.DIRECTORY_MUSIC) ?: context.filesDir
-                val musicDir = File(baseDir, "Lunify").apply { mkdirs() }
+                // 2. Prepare staging file in app's internal cache directory
+                // We download chunks to cache first for unthrottled streaming and safe I/O
                 val safeTitle = track.title.replace(Regex("[^a-zA-Z0-9.-]"), "_").take(50)
                 val safeFileName = "${safeTitle}_${track.id}.m4a"
-                val destinationFile = File(musicDir, safeFileName)
+                val tempFile = File(context.cacheDir, "download_${track.id}.tmp")
 
                 // 3. High-speed chunked download with YouTube CDN throttle avoidance
                 var lastNotifiedTime = System.currentTimeMillis()
@@ -424,13 +423,24 @@ class AudioPlayerManager(
 
                 chunkedDownloader.downloadToFile(
                     streamUrl = streamUrl,
-                    destinationFile = destinationFile,
+                    destinationFile = tempFile,
                 ) { downloadedBytes, totalBytes ->
                     val currentTime = System.currentTimeMillis()
                     if (totalBytes > 0L) {
                         val percent = ((downloadedBytes * 100) / totalBytes).toInt().coerceIn(0, 100)
-                        // Throttle notification updates: notify every 2% increase, or every 400ms, or at 100%
-                        if (percent != lastNotifiedPercent && (percent - lastNotifiedPercent >= 2 || currentTime - lastNotifiedTime >= 400L || percent == 100)) {
+
+                        // Hey friend! Here is why we use shouldDispatchProgressUpdate:
+                        // Only percentages in 0..99 are dispatched as ongoing progress notifications.
+                        // When bytes reach 100%, we intentionally skip showDownloadProgress() to avoid
+                        // race conditions where Android's NotificationManager gets flooded and freezes
+                        // at 100% ongoing. Step 7 below transitions directly to showDownloadComplete!
+                        if (DownloadNotificationManager.shouldDispatchProgressUpdate(
+                                currentPercent = percent,
+                                lastNotifiedPercent = lastNotifiedPercent,
+                                currentTimeMs = currentTime,
+                                lastNotifiedTimeMs = lastNotifiedTime,
+                            )
+                        ) {
                             lastNotifiedPercent = percent
                             lastNotifiedTime = currentTime
                             downloadNotificationManager.showDownloadProgress(
@@ -454,46 +464,135 @@ class AudioPlayerManager(
                     }
                 }
 
-                Log.d(TAG, "Audio file saved successfully: ${destinationFile.absolutePath} (${destinationFile.length()} bytes)")
+                Log.d(TAG, "Audio chunks saved to staging: ${tempFile.absolutePath} (${tempFile.length()} bytes)")
 
-                // 4. Update track metadata as downloaded
+                // 4. Publish audio file to device's public Music storage (/storage/emulated/0/Music/Lunify)
+                // This makes the file visible to user file managers, system media players, and Lunify library.
+                var finalUri: Uri? = null
+                var finalFilePath = File(
+                    Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC),
+                    "Lunify/$safeFileName",
+                ).absolutePath
+
+                try {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        // Remove any prior duplicate entry with the same display name
+                        try {
+                            val selection = "${MediaStore.Audio.Media.DISPLAY_NAME} = ?"
+                            context.contentResolver.delete(
+                                MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
+                                selection,
+                                arrayOf(safeFileName),
+                            )
+                        } catch (e: Exception) {
+                            Log.w(TAG, "Could not delete old MediaStore entry: ${e.message}")
+                        }
+
+                        val contentValues = ContentValues().apply {
+                            put(MediaStore.Audio.Media.DISPLAY_NAME, safeFileName)
+                            put(MediaStore.Audio.Media.TITLE, track.title)
+                            put(MediaStore.Audio.Media.ARTIST, track.artist)
+                            put(MediaStore.Audio.Media.ALBUM, track.album.ifBlank { "Lunify" })
+                            put(MediaStore.Audio.Media.MIME_TYPE, "audio/mp4")
+                            put(MediaStore.Audio.Media.IS_MUSIC, 1)
+                            put(MediaStore.Audio.Media.RELATIVE_PATH, "${Environment.DIRECTORY_MUSIC}/Lunify")
+                            put(MediaStore.Audio.Media.IS_PENDING, 1)
+                        }
+
+                        val mediaStoreUri = context.contentResolver.insert(
+                            MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
+                            contentValues,
+                        )
+
+                        if (mediaStoreUri != null) {
+                            finalUri = mediaStoreUri
+                            context.contentResolver.openOutputStream(mediaStoreUri)?.use { out ->
+                                tempFile.inputStream().use { input ->
+                                    input.copyTo(out)
+                                }
+                            }
+
+                            // Publish file by releasing IS_PENDING
+                            val publishValues = ContentValues().apply {
+                                put(MediaStore.Audio.Media.IS_PENDING, 0)
+                            }
+                            context.contentResolver.update(mediaStoreUri, publishValues, null, null)
+
+                            // Resolve the exact disk path assigned by MediaStore
+                            try {
+                                context.contentResolver.query(
+                                    mediaStoreUri,
+                                    arrayOf(MediaStore.Audio.Media.DATA),
+                                    null,
+                                    null,
+                                    null,
+                                )?.use { cursor ->
+                                    if (cursor.moveToFirst()) {
+                                        val dataIdx = cursor.getColumnIndex(MediaStore.Audio.Media.DATA)
+                                        if (dataIdx >= 0) {
+                                            val resolved = cursor.getString(dataIdx)
+                                            if (!resolved.isNullOrBlank()) {
+                                                finalFilePath = resolved
+                                            }
+                                        }
+                                    }
+                                }
+                            } catch (e: Exception) {
+                                Log.w(TAG, "Could not read DATA column: ${e.message}")
+                            }
+                        }
+                    } else {
+                        // Pre-Android 10 fallback: copy directly to public Music directory
+                        val publicMusicDir = File(
+                            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC),
+                            "Lunify",
+                        ).apply { mkdirs() }
+                        val publicDestFile = File(publicMusicDir, safeFileName)
+                        tempFile.copyTo(publicDestFile, overwrite = true)
+                        finalFilePath = publicDestFile.absolutePath
+                        finalUri = Uri.fromFile(publicDestFile)
+                        MediaScannerConnection.scanFile(
+                            context,
+                            arrayOf(publicDestFile.absolutePath),
+                            arrayOf("audio/mp4"),
+                            null,
+                        )
+                    }
+                } finally {
+                    // Clean up temporary cache file so internal storage is not wasted
+                    if (tempFile.exists()) {
+                        tempFile.delete()
+                    }
+                }
+
+                val finalFile = File(finalFilePath)
+                Log.d(TAG, "Audio file published successfully to disk: $finalFilePath (${finalFile.length()} bytes)")
+
+                // 5. Update track metadata as downloaded and persist in LibraryStorage
                 val downloadedTrack = track.copy(
                     isDownloaded = true,
-                    filePath = destinationFile.absolutePath,
-                    contentUri = Uri.fromFile(destinationFile).toString(),
-                    sizeBytes = destinationFile.length(),
+                    filePath = finalFilePath,
+                    contentUri = finalUri?.toString() ?: Uri.fromFile(finalFile).toString(),
+                    sizeBytes = if (finalFile.exists()) finalFile.length() else tempFile.length(),
                     folderName = "Lunify",
                 )
 
-                // 5. Persist into LibraryStorage
                 libraryStorage.saveDownloadedTrack(downloadedTrack)
                 libraryStorage.recordPlay(downloadedTrack.id)
 
-                // 6. Register with Android MediaStore & trigger system scanner
+                // 6. Notify MediaScanner so all apps and system pick up the newly saved track immediately
                 try {
-                    val contentValues = ContentValues().apply {
-                        put(MediaStore.Audio.Media.DISPLAY_NAME, safeFileName)
-                        put(MediaStore.Audio.Media.TITLE, track.title)
-                        put(MediaStore.Audio.Media.ARTIST, track.artist)
-                        put(MediaStore.Audio.Media.ALBUM, track.album.ifBlank { "Lunify" })
-                        put(MediaStore.Audio.Media.MIME_TYPE, "audio/mp4")
-                        put(MediaStore.Audio.Media.IS_MUSIC, 1)
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                            put(MediaStore.Audio.Media.RELATIVE_PATH, "${Environment.DIRECTORY_MUSIC}/Lunify")
-                        }
-                    }
-                    val mediaStoreUri = context.contentResolver.insert(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, contentValues)
-                    if (mediaStoreUri != null) {
-                        context.contentResolver.openOutputStream(mediaStoreUri)?.use { out ->
-                            destinationFile.inputStream().copyTo(out)
-                        }
-                    }
-                    MediaScannerConnection.scanFile(context, arrayOf(destinationFile.absolutePath), arrayOf("audio/mp4"), null)
+                    MediaScannerConnection.scanFile(
+                        context,
+                        arrayOf(finalFilePath),
+                        arrayOf("audio/mp4"),
+                        null,
+                    )
                 } catch (e: Exception) {
-                    Log.w(TAG, "MediaStore registration notice: ${e.message}")
+                    Log.w(TAG, "MediaScanner registration notice: ${e.message}")
                 }
 
-                // 7. Transition notification to completed state
+                // 7. Transition notification cleanly to completed state
                 downloadNotificationManager.showDownloadComplete(track)
 
                 withContext(Dispatchers.Main) {
