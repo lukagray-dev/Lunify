@@ -1,0 +1,213 @@
+name: Beta Pre-Release
+
+# ==============================================================================
+# Lunify - Beta Pre-Release Automation Workflow
+# ==============================================================================
+#
+# Hey friend! This workflow is triggered manually via workflow_dispatch.
+# It handles the full end-to-end beta release cycle:
+# 1. Runs the entire unit test suite (54+ production tests).
+# 2. Computes the next semver beta tag (e.g. v0.1.0-beta -> v0.1.1-beta) or accepts
+#    an optional manual tag override.
+# 3. Compiles the optimized Android release APK using Gradle.
+# 4. Generates cryptographic SHA256 checksums and packages the binary.
+# 5. Pushes the new git tag to GitHub and publishes the pre-release with auto-generated
+#    release notes and installable APK attachments.
+# ==============================================================================
+
+on:
+  workflow_dispatch:
+    inputs:
+      custom_tag:
+        description: 'Optional manual version tag (e.g. v0.1.0-beta). Leave empty to auto-increment from latest beta tag.'
+        required: false
+        default: ''
+
+jobs:
+  test:
+    name: Run Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x android/gradlew
+
+      - name: Run Unit Tests
+        run: |
+          cd android
+          ./gradlew testDebugUnitTest --no-daemon
+
+  build:
+    name: Build Android Release APK
+    needs: test
+    runs-on: ubuntu-latest
+    outputs:
+      new_tag: ${{ steps.bump.outputs.NEW_TAG }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Determine the next beta version tag matching pattern v0.*.*-beta
+      - name: Determine next version tag
+        id: bump
+        uses: actions/github-script@v7
+        with:
+          script: |
+            // Check if user specified a manual tag input
+            const inputTag = context.payload.inputs && context.payload.inputs.custom_tag ? context.payload.inputs.custom_tag.trim() : '';
+            if (inputTag) {
+              console.log(`Using user-specified manual tag: ${inputTag}`);
+              core.setOutput('NEW_TAG', inputTag);
+              core.exportVariable('NEW_TAG', inputTag);
+              return;
+            }
+
+            // Fetch up to 100 recent tags from the GitHub API
+            const { data: tags } = await github.rest.repos.listTags({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              per_page: 100
+            });
+
+            // Filter for pre-release tags matching pattern v0.*.*-beta
+            const betaRegex = /^v0\.\d+\.\d+-beta$/;
+            const betaTags = tags
+              .map(t => t.name)
+              .filter(name => betaRegex.test(name));
+
+            // Helper to extract minor and patch numbers from v0.X.Y-beta
+            const parseBetaVersion = (v) => {
+              const match = v.match(/^v0\.(\d+)\.(\d+)-beta$/);
+              if (!match) return [0, 0];
+              return [parseInt(match[1], 10), parseInt(match[2], 10)];
+            };
+
+            // Sort tags descending (highest version first)
+            betaTags.sort((a, b) => {
+              const [minorA, patchA] = parseBetaVersion(a);
+              const [minorB, patchB] = parseBetaVersion(b);
+              if (minorA !== minorB) return minorB - minorA;
+              return patchB - patchA;
+            });
+
+            // If no previous beta tags exist, start with v0.1.0-beta.
+            // Otherwise, increment the patch number of the latest tag.
+            let newTag = 'v0.1.0-beta';
+            if (betaTags.length > 0) {
+              const latestTag = betaTags[0];
+              const [minor, patch] = parseBetaVersion(latestTag);
+              newTag = `v0.${minor}.${patch + 1}-beta`;
+            }
+
+            console.log(`Latest beta tag found: ${betaTags[0] || 'none'}`);
+            console.log(`Computed next beta tag: ${newTag}`);
+
+            core.setOutput('NEW_TAG', newTag);
+            core.exportVariable('NEW_TAG', newTag);
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x android/gradlew
+
+      - name: Build Production Release APK
+        run: |
+          cd android
+          ./gradlew assembleRelease --no-daemon
+
+      - name: Locate and Package Release Binaries
+        shell: bash
+        run: |
+          TAG="${{ steps.bump.outputs.NEW_TAG }}"
+          mkdir -p artifacts
+
+          APK_PATH="android/app/build/outputs/apk/release/app-release.apk"
+          if [ ! -f "$APK_PATH" ]; then
+            APK_PATH="android/app/build/outputs/apk/release/app-release-unsigned.apk"
+          fi
+
+          if [ -f "$APK_PATH" ]; then
+            DEST_APK="artifacts/Lunify-$TAG.apk"
+            cp "$APK_PATH" "$DEST_APK"
+            echo "Successfully packaged APK to $DEST_APK"
+
+            # Compute SHA256 checksum for verification integrity
+            (cd artifacts && sha256sum "Lunify-$TAG.apk" > "Lunify-$TAG.sha256")
+          else
+            echo "Error: Release APK not found in android/app/build/outputs/apk/release/"
+            exit 1
+          fi
+
+      - name: Upload Binaries Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: lunify-binaries
+          path: artifacts/*
+          if-no-files-found: error
+
+  release:
+    name: Create GitHub Pre-Release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Download the binaries compiled in the build job
+      - name: Download Build Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: lunify-binaries
+          path: dist
+
+      # Delete any existing GitHub release and tag associated with this version if needed
+      - name: Delete existing GitHub release and tag
+        run: |
+          gh release delete ${{ needs.build.outputs.new_tag }} --yes --cleanup-tag || true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Explicitly tag current HEAD with calculated version and push to remote
+      - name: Create Git Tag
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git tag ${{ needs.build.outputs.new_tag }}
+          git push origin ${{ needs.build.outputs.new_tag }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Create pre-release and upload release APK and checksum
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.build.outputs.new_tag }}
+          name: Lunify ${{ needs.build.outputs.new_tag }}
+          prerelease: true
+          make_latest: false
+          generate_release_notes: true
+          files: dist/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
