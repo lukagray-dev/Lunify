@@ -18,7 +18,7 @@ import com.lunify.domain.model.PlayerState
 import com.lunify.domain.model.Track
 import com.lunify.domain.model.TrackSortOption
 import com.lunify.player.AudioPlayerManager
-import com.lunify.ui.duo.DuoScreen
+import com.lunify.player.duo.DuoManager
 import com.lunify.ui.home.HomeScreen
 import com.lunify.ui.library.LibraryScreen
 import com.lunify.ui.search.SearchScreen
@@ -55,6 +55,7 @@ fun AppNavigationGraph(
     audioPlayerManager: AudioPlayerManager,
     libraryStorage: LibraryStorage,
     localAudioRepository: LocalAudioRepository,
+    duoManager: DuoManager,
     modifier: Modifier = Modifier,
 ) {
     NavHost(
@@ -107,6 +108,7 @@ fun AppNavigationGraph(
                 onOpenSettings = { navController.navigate(NavRoute.SETTINGS) },
                 onOpenDuo = onOpenDuo,
                 onOpenTrackOptions = onOpenTrackOptions,
+                duoManager = duoManager,
             )
         }
 
@@ -131,13 +133,7 @@ fun AppNavigationGraph(
                 audioPlayerManager = audioPlayerManager,
                 libraryStorage = libraryStorage,
                 localAudioRepository = localAudioRepository,
-            )
-        }
-
-        composable(NavRoute.DUO) {
-            DuoScreen(
-                playerState = playerState,
-                onTrackSelect = onTrackSelect,
+                duoManager = duoManager,
             )
         }
 
@@ -159,8 +155,7 @@ private fun getRouteIndex(route: String?): Int {
         NavRoute.HOME -> 0
         NavRoute.LIBRARY -> 1
         NavRoute.SEARCH -> 2
-        NavRoute.DUO -> 3
-        NavRoute.SETTINGS -> 4
+        NavRoute.SETTINGS -> 3
         else -> 0
     }
 }

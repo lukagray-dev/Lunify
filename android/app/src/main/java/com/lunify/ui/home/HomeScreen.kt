@@ -22,6 +22,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -30,18 +32,19 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.ui.layout.ContentScale
 import coil.compose.AsyncImage
 import kotlinx.coroutines.launch
 import com.lunify.data.repository.OnlineMusicRepository
 import com.lunify.domain.model.Album
 import com.lunify.domain.model.Artist
+import com.lunify.domain.model.DuoConnectionState
 import com.lunify.domain.model.PlayerState
 import com.lunify.domain.model.Track
+import com.lunify.player.duo.DuoManager
 import com.lunify.ui.components.AmbientThemeGlow
 import com.lunify.ui.components.LiquidGlassContainer
 import com.lunify.ui.components.LucideIcon
@@ -49,6 +52,7 @@ import com.lunify.ui.components.LucideIconButton
 import com.lunify.ui.components.LucideIcons
 import com.lunify.ui.components.MediaCard
 import com.lunify.ui.theme.AccentCyan
+import com.lunify.ui.theme.AccentEmerald
 import com.lunify.ui.theme.AccentPurple
 import com.lunify.ui.theme.GlassBorderSubtle
 import com.lunify.ui.theme.GlassSurfaceElevated
@@ -86,9 +90,15 @@ fun HomeScreen(
     onPlayQueue: (List<Track>, Track) -> Unit = { _, t -> onTrackSelect(t) },
     onOpenTrackOptions: (Track) -> Unit = {},
     onlineRepository: OnlineMusicRepository = remember { OnlineMusicRepository() },
+    duoManager: DuoManager? = null,
     modifier: Modifier = Modifier,
 ) {
     var selectedMoodId by remember { mutableStateOf("all") }
+
+    // Duo synchronization status for contextual header theme & branding
+    val duoConnectionState by duoManager?.connectionState?.collectAsState() ?: remember { mutableStateOf(DuoConnectionState.DISCONNECTED) }
+    val isDuoConnected = duoConnectionState == DuoConnectionState.CONNECTED
+    val peerInfo by duoManager?.peerInfo?.collectAsState() ?: remember { mutableStateOf(null) }
 
     // Dynamic state populated strictly from real YouTube Music InnerTube responses
     var quickPicks by remember { mutableStateOf<List<Track>>(emptyList()) }
@@ -130,18 +140,18 @@ fun HomeScreen(
             .fillMaxSize()
             .background(ObsidianBackground),
     ) {
-        // Subtle ambient lighting behind header
+        // Subtle ambient lighting behind header (Emerald glow when Duo is active)
         AmbientThemeGlow(
-            primaryColor = AccentCyan,
-            secondaryColor = AccentPurple,
-            alpha = 0.22f,
+            primaryColor = if (isDuoConnected) AccentEmerald else AccentCyan,
+            secondaryColor = if (isDuoConnected) AccentCyan else AccentPurple,
+            alpha = if (isDuoConnected) 0.28f else 0.22f,
         )
 
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(bottom = 180.dp), // Generous clearance for floating MiniPlayer & BottomBar dock
         ) {
-            // 1. Top Lunify Brand Header
+            // 1. Top Lunify Brand Header (Contextual Duo Mode)
             item {
                 Row(
                     modifier = Modifier
@@ -161,26 +171,36 @@ fun HomeScreen(
                                 .size(36.dp)
                                 .liquidGlass(
                                     shape = CircleShape,
-                                    backgroundColor = Color.White.copy(alpha = 0.08f),
+                                    backgroundColor = if (isDuoConnected) AccentEmerald.copy(alpha = 0.16f) else Color.White.copy(alpha = 0.08f),
                                     interactive = false,
                                 ),
                             contentAlignment = Alignment.Center,
                         ) {
                             LucideIcon(
-                                iconRes = LucideIcons.BrandLogo,
-                                contentDescription = "Lunify Logo",
+                                iconRes = if (isDuoConnected) LucideIcons.Duo else LucideIcons.BrandLogo,
+                                contentDescription = if (isDuoConnected) "Lunify Duo" else "Lunify Logo",
                                 size = 20.dp,
-                                tint = Color.White,
+                                tint = if (isDuoConnected) AccentEmerald else Color.White,
                             )
                         }
 
-                        Text(
-                            text = "Lunify",
-                            color = TextPrimary,
-                            fontSize = 22.sp,
-                            fontWeight = FontWeight.Bold,
-                            letterSpacing = (-0.5).sp,
-                        )
+                        Column {
+                            Text(
+                                text = if (isDuoConnected) "Lunify Duo" else "Lunify",
+                                color = TextPrimary,
+                                fontSize = 22.sp,
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = (-0.5).sp,
+                            )
+                            if (isDuoConnected) {
+                                Text(
+                                    text = "Listening with ${peerInfo?.deviceName ?: "Partner"}",
+                                    color = AccentEmerald,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Medium,
+                                )
+                            }
+                        }
                     }
 
                     // Right: Liquid Glass Action Capsule (Duo + Settings Gear)
@@ -189,7 +209,7 @@ fun HomeScreen(
                             .height(40.dp)
                             .liquidGlass(
                                 shape = CircleShape,
-                                backgroundColor = GlassSurfaceElevated,
+                                backgroundColor = if (isDuoConnected) AccentEmerald.copy(alpha = 0.12f) else GlassSurfaceElevated,
                                 interactive = false,
                                 borderWidth = 1.dp,
                             )
@@ -204,7 +224,7 @@ fun HomeScreen(
                             onClick = onOpenDuo,
                             iconSize = 19.dp,
                             buttonSize = 34.dp,
-                            tint = Color.White,
+                            tint = if (isDuoConnected) AccentEmerald else Color.White,
                         )
 
                         // Subtle Translucent Divider
@@ -212,7 +232,7 @@ fun HomeScreen(
                             modifier = Modifier
                                 .width(1.dp)
                                 .height(16.dp)
-                                .background(Color.White.copy(alpha = 0.2f)),
+                                .background(if (isDuoConnected) AccentEmerald.copy(alpha = 0.35f) else Color.White.copy(alpha = 0.2f)),
                         )
 
                         // Settings Launcher (Gear Icon)

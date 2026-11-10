@@ -4,6 +4,7 @@ import android.app.Application
 import com.lunify.data.local.LibraryStorage
 import com.lunify.data.repository.LocalAudioRepository
 import com.lunify.player.AudioPlayerManager
+import com.lunify.player.duo.DuoManager
 
 /**
  * ==============================================================================
@@ -46,6 +47,10 @@ class LunifyApplication : Application() {
     lateinit var audioPlayerManager: AudioPlayerManager
         private set
 
+    // Real-time Duo synchronization coordinator
+    lateinit var duoManager: DuoManager
+        private set
+
     override fun onCreate() {
         super.onCreate()
         instance = this
@@ -58,6 +63,9 @@ class LunifyApplication : Application() {
 
         // 3. Initialize the core audio player manager
         audioPlayerManager = AudioPlayerManager(applicationContext, libraryStorage)
+
+        // 4. Initialize Duo synchronization manager
+        duoManager = DuoManager(applicationContext, localAudioRepository, audioPlayerManager)
     }
 
     companion object {

@@ -16,6 +16,7 @@ import androidx.core.content.ContextCompat
 import com.lunify.data.local.LibraryStorage
 import com.lunify.data.repository.LocalAudioRepository
 import com.lunify.player.AudioPlayerManager
+import com.lunify.player.duo.DuoManager
 import com.lunify.player.service.LunifyMediaService
 import com.lunify.ui.LunifyApp
 import com.lunify.ui.theme.LunifyTheme
@@ -48,6 +49,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var libraryStorage: LibraryStorage
     private lateinit var audioPlayerManager: AudioPlayerManager
     private lateinit var localAudioRepository: LocalAudioRepository
+    private lateinit var duoManager: DuoManager
 
     companion object {
         private const val TAG = "MainActivity"
@@ -65,6 +67,7 @@ class MainActivity : ComponentActivity() {
         libraryStorage = app.libraryStorage
         audioPlayerManager = app.audioPlayerManager
         localAudioRepository = app.localAudioRepository
+        duoManager = app.duoManager
 
         // 3. Request POST_NOTIFICATIONS permission on Android 13+ (API 33+)
         requestNotificationPermissionIfNeeded()
@@ -76,6 +79,7 @@ class MainActivity : ComponentActivity() {
                     audioPlayerManager = audioPlayerManager,
                     libraryStorage = libraryStorage,
                     localAudioRepository = localAudioRepository,
+                    duoManager = duoManager,
                     modifier = Modifier.fillMaxSize(),
                 )
             }

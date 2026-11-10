@@ -48,6 +48,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -65,6 +66,7 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.lunify.data.local.LibraryStorage
 import com.lunify.data.repository.LocalAudioRepository
+import com.lunify.domain.model.DuoConnectionState
 import com.lunify.domain.model.HistoryItem
 import com.lunify.domain.model.PlaybackSource
 import com.lunify.domain.model.PlayerState
@@ -72,6 +74,7 @@ import com.lunify.domain.model.Playlist
 import com.lunify.domain.model.Track
 import com.lunify.domain.model.TrackSortOption
 import com.lunify.player.AudioPlayerManager
+import com.lunify.player.duo.DuoManager
 import com.lunify.ui.components.AddToPlaylistSheet
 import com.lunify.ui.components.LiquidGlassContainer
 import com.lunify.ui.components.LucideIcon
@@ -133,10 +136,17 @@ fun LibraryScreen(
     audioPlayerManager: AudioPlayerManager,
     libraryStorage: LibraryStorage,
     localAudioRepository: LocalAudioRepository,
+    duoManager: DuoManager? = null,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
     var selectedTab by remember { mutableStateOf("Downloaded") }
+
+    // Duo synchronization state
+    val duoConnectionState by duoManager?.connectionState?.collectAsState() ?: remember { mutableStateOf(DuoConnectionState.DISCONNECTED) }
+    val isDuoConnected = duoConnectionState == DuoConnectionState.CONNECTED
+    val commonOfflineTracks by duoManager?.commonOfflineTracks?.collectAsState() ?: remember { mutableStateOf(emptyList()) }
+    val peerInfo by duoManager?.peerInfo?.collectAsState() ?: remember { mutableStateOf(null) }
 
     // Media Permissions (Android 13+ vs Android 12-)
     val permissionToRequest = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -198,6 +208,11 @@ fun LibraryScreen(
         localAudioRepository.sortTracks(tracksWithPlayCounts, currentSortOption)
     }
 
+    // Active offline tracks: When Duo is connected, show ONLY the mutual common offline tracks!
+    val displayedOfflineTracks = remember(isDuoConnected, commonOfflineTracks, sortedLocalTracks) {
+        if (isDuoConnected) commonOfflineTracks else sortedLocalTracks
+    }
+
     // Folder playlists derived from local tracks
     val folderPlaylists = remember(localTracks) {
         localAudioRepository.getFolderPlaylists(localTracks)
@@ -232,7 +247,7 @@ fun LibraryScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                // Left: Icon container + "Your Library" title
+                // Left: Icon container + "Your Library" / "Duo Library" title
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -242,35 +257,45 @@ fun LibraryScreen(
                             .size(36.dp)
                             .liquidGlass(
                                 shape = CircleShape,
-                                backgroundColor = Color.White.copy(alpha = 0.08f),
+                                backgroundColor = if (isDuoConnected) AccentEmerald.copy(alpha = 0.15f) else Color.White.copy(alpha = 0.08f),
                                 interactive = false,
                             ),
                         contentAlignment = Alignment.Center,
                     ) {
                         LucideIcon(
-                            iconRes = LucideIcons.Download,
-                            contentDescription = "Your Library",
+                            iconRes = if (isDuoConnected) LucideIcons.Duo else LucideIcons.Download,
+                            contentDescription = if (isDuoConnected) "Duo Library" else "Your Library",
                             size = 20.dp,
-                            tint = Color.White,
+                            tint = if (isDuoConnected) AccentEmerald else Color.White,
                         )
                     }
 
-                    Text(
-                        text = "Your Library",
-                        color = TextPrimary,
-                        fontSize = 22.sp,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = (-0.5).sp,
-                    )
+                    Column {
+                        Text(
+                            text = if (isDuoConnected) "Duo Library" else "Your Library",
+                            color = TextPrimary,
+                            fontSize = 22.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = (-0.5).sp,
+                        )
+                        if (isDuoConnected) {
+                            Text(
+                                text = "Shared Offline Songs",
+                                color = AccentEmerald,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Medium,
+                            )
+                        }
+                    }
                 }
 
-                // Right: Symmetrical 40dp Liquid Glass Storage Capsule
+                // Right: Symmetrical 40dp Liquid Glass Storage Capsule or Duo Active Pill
                 Row(
                     modifier = Modifier
                         .height(40.dp)
                         .liquidGlass(
                             shape = CircleShape,
-                            backgroundColor = GlassSurfaceElevated,
+                            backgroundColor = if (isDuoConnected) AccentEmerald.copy(alpha = 0.1f) else GlassSurfaceElevated,
                             interactive = false,
                             borderWidth = 1.dp,
                         )
@@ -278,18 +303,33 @@ fun LibraryScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
-                    LucideIcon(
-                        iconRes = LucideIcons.Folder,
-                        contentDescription = null,
-                        size = 15.dp,
-                        tint = if (hasAudioPermission) Color.White else TextMuted,
-                    )
-                    Text(
-                        text = formattedStorageString,
-                        color = if (hasAudioPermission) Color.White else TextMuted,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold,
-                    )
+                    if (isDuoConnected) {
+                        LucideIcon(
+                            iconRes = LucideIcons.Duo,
+                            contentDescription = null,
+                            size = 15.dp,
+                            tint = AccentEmerald,
+                        )
+                        Text(
+                            text = "In Sync",
+                            color = AccentEmerald,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    } else {
+                        LucideIcon(
+                            iconRes = LucideIcons.Folder,
+                            contentDescription = null,
+                            size = 15.dp,
+                            tint = if (hasAudioPermission) Color.White else TextMuted,
+                        )
+                        Text(
+                            text = formattedStorageString,
+                            color = if (hasAudioPermission) Color.White else TextMuted,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    }
                 }
             }
 
@@ -373,19 +413,20 @@ fun LibraryScreen(
                         DownloadedSection(
                             hasPermission = hasAudioPermission,
                             isLoading = isLoadingTracks,
-                            tracks = sortedLocalTracks,
+                            tracks = displayedOfflineTracks,
                             playerState = playerState,
                             currentSortOption = currentSortOption,
+                            isDuoMode = isDuoConnected,
                             onRequestPermission = { permissionLauncher.launch(permissionToRequest) },
-                            onTrackClick = { track -> onPlayQueue(sortedLocalTracks, track) },
+                            onTrackClick = { track -> onPlayQueue(displayedOfflineTracks, track) },
                             onPlayAll = {
-                                if (sortedLocalTracks.isNotEmpty()) {
-                                    onPlayQueue(sortedLocalTracks, sortedLocalTracks.first())
+                                if (displayedOfflineTracks.isNotEmpty()) {
+                                    onPlayQueue(displayedOfflineTracks, displayedOfflineTracks.first())
                                 }
                             },
                             onShuffleAll = {
-                                if (sortedLocalTracks.isNotEmpty()) {
-                                    val shuffled = sortedLocalTracks.shuffled()
+                                if (displayedOfflineTracks.isNotEmpty()) {
+                                    val shuffled = displayedOfflineTracks.shuffled()
                                     onPlayQueue(shuffled, shuffled.first())
                                 }
                             },
@@ -481,6 +522,7 @@ private fun DownloadedSection(
     tracks: List<Track>,
     playerState: PlayerState,
     currentSortOption: TrackSortOption,
+    isDuoMode: Boolean = false,
     onRequestPermission: () -> Unit,
     onTrackClick: (Track) -> Unit,
     onPlayAll: () -> Unit,
@@ -583,19 +625,20 @@ private fun DownloadedSection(
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 LucideIcon(
-                    iconRes = LucideIcons.Music,
+                    iconRes = if (isDuoMode) LucideIcons.Duo else LucideIcons.Music,
                     contentDescription = null,
                     size = 40.dp,
-                    tint = TextMuted,
+                    tint = if (isDuoMode) AccentEmerald else TextMuted,
                 )
                 Text(
-                    text = "No Audio Files Found",
+                    text = if (isDuoMode) "No Mutual Offline Songs" else "No Audio Files Found",
                     color = TextPrimary,
                     fontSize = 16.sp,
                     fontWeight = FontWeight.SemiBold,
                 )
                 Text(
-                    text = "Transfer or download MP3, M4A, or FLAC songs to your device storage to listen offline.",
+                    text = if (isDuoMode) "No matching songs were found on both devices. Both phones need to have the track downloaded to listen offline together in Duo."
+                    else "Transfer or download MP3, M4A, or FLAC songs to your device storage to listen offline.",
                     color = TextSecondary,
                     fontSize = 12.sp,
                     textAlign = TextAlign.Center,

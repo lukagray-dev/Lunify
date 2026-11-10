@@ -160,10 +160,24 @@ class LocalAudioRepository(private val context: Context) {
         if (libraryStorage != null) {
             try {
                 val existingIds = tracksList.map { it.id }.toSet()
-                val existingPaths = tracksList.map { it.filePath }.toSet()
+                val existingNormalizedKeys = tracksList.map {
+                    val t = it.title.trim().lowercase()
+                    val a = it.artist.trim().lowercase()
+                    "$t|$a"
+                }.toSet()
+                val existingPaths = tracksList.map {
+                    try { File(it.filePath).canonicalPath } catch (e: Exception) { it.filePath }
+                }.filter { it.isNotBlank() }.toSet()
+
                 val appDownloads = libraryStorage.getDownloadedTracks()
                 for (download in appDownloads) {
-                    if (download.id !in existingIds && download.filePath !in existingPaths) {
+                    val canonicalPath = try { File(download.filePath).canonicalPath } catch (e: Exception) { download.filePath }
+                    val normKey = "${download.title.trim().lowercase()}|${download.artist.trim().lowercase()}"
+
+                    if (download.id !in existingIds &&
+                        canonicalPath !in existingPaths &&
+                        normKey !in existingNormalizedKeys
+                    ) {
                         val file = File(download.filePath)
                         if (file.exists() && file.length() > 0) {
                             tracksList.add(download.copy(isDownloaded = true))

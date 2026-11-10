@@ -39,6 +39,7 @@ import com.lunify.domain.model.SyncedLyrics
 import com.lunify.domain.model.Track
 import com.lunify.domain.model.TrackSortOption
 import com.lunify.player.AudioPlayerManager
+import com.lunify.player.duo.DuoManager
 import com.lunify.ui.components.AddToPlaylistSheet
 import com.lunify.ui.components.AppBottomNavigationBar
 import com.lunify.ui.components.SortOptionsSheet
@@ -76,6 +77,7 @@ fun LunifyApp(
     audioPlayerManager: AudioPlayerManager,
     libraryStorage: LibraryStorage,
     localAudioRepository: LocalAudioRepository,
+    duoManager: DuoManager,
     modifier: Modifier = Modifier,
 ) {
     val navController = rememberNavController()
@@ -157,6 +159,7 @@ fun LunifyApp(
             audioPlayerManager = audioPlayerManager,
             libraryStorage = libraryStorage,
             localAudioRepository = localAudioRepository,
+            duoManager = duoManager,
         )
 
         // ----------------------------------------------------------------------
@@ -309,6 +312,7 @@ fun LunifyApp(
             modifier = Modifier.align(Alignment.BottomCenter),
         ) {
             DuoSheet(
+                duoManager = duoManager,
                 playerState = playerState,
                 onTrackSelect = { track ->
                     isMiniPlayerDismissed = false

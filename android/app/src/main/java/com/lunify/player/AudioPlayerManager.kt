@@ -25,6 +25,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import com.lunify.data.local.LibraryStorage
 import com.lunify.data.repository.OnlineMusicRepository
+import com.lunify.domain.model.DuoAction
 import com.lunify.domain.model.PlaybackProgress
 import com.lunify.domain.model.PlaybackSource
 import com.lunify.domain.model.PlayerState
@@ -135,6 +136,12 @@ class AudioPlayerManager(
     private val _playerState = MutableStateFlow(PlayerState())
     val playerState: StateFlow<PlayerState> = _playerState.asStateFlow()
 
+    /**
+     * Dispatcher callback for Lunify Duo synchronization.
+     * When local user plays, pauses, or seeks, this transmits the event to the connected peer.
+     */
+    var duoSyncDispatcher: ((action: String, track: Track?, positionMs: Long) -> Unit)? = null
+
     init {
         setupPlayerListener()
     }
@@ -236,8 +243,15 @@ class AudioPlayerManager(
      *
      * @param track The song to play.
      * @param newQueue Optional list of tracks forming the active queue/playlist.
+     * @param isRemoteSync Whether this command was received from a remote Duo peer (anti-echo flag).
+     * @param startPositionMs Optional starting position in milliseconds (for drift compensation).
      */
-    fun playTrack(track: Track, newQueue: List<Track>? = null) {
+    fun playTrack(
+        track: Track,
+        newQueue: List<Track>? = null,
+        isRemoteSync: Boolean = false,
+        startPositionMs: Long = 0L,
+    ) {
         val updatedQueue = if (newQueue != null && newQueue.isNotEmpty()) {
             newQueue
         } else if (_playerState.value.queue.any { it.id == track.id }) {
@@ -259,16 +273,21 @@ class AudioPlayerManager(
             )
         }
 
+        // Anti-echo protection: notify Duo sync only if initiated locally
+        if (!isRemoteSync) {
+            duoSyncDispatcher?.invoke(DuoAction.PLAY, trackWithFavorite, startPositionMs)
+        }
+
         // Cancel any pending stream resolution from previous track taps
         streamResolutionJob?.cancel()
 
         // Check if track is a local file or already has a direct HTTP stream URL
         if (track.isDownloaded && track.contentUri.isNotBlank()) {
-            playDirectUri(Uri.parse(track.contentUri), trackWithFavorite)
+            playDirectUri(Uri.parse(track.contentUri), trackWithFavorite, startPositionMs)
         } else if (track.contentUri.startsWith("http://") || track.contentUri.startsWith("https://")) {
-            playDirectUri(Uri.parse(track.contentUri), trackWithFavorite)
+            playDirectUri(Uri.parse(track.contentUri), trackWithFavorite, startPositionMs)
         } else if (track.id.startsWith("content://") || track.id.startsWith("file://")) {
-            playDirectUri(Uri.parse(track.id), trackWithFavorite)
+            playDirectUri(Uri.parse(track.id), trackWithFavorite, startPositionMs)
         } else {
             // Online YouTube Music track: resolve audio stream URL asynchronously
             streamResolutionJob = scope.launch(Dispatchers.IO) {
@@ -279,7 +298,7 @@ class AudioPlayerManager(
                     streamResult.onSuccess { streamUrl ->
                         Log.d(TAG, "Stream resolved successfully for ${track.id}")
                         val resolvedTrack = trackWithFavorite.copy(contentUri = streamUrl)
-                        playDirectUri(Uri.parse(streamUrl), resolvedTrack)
+                        playDirectUri(Uri.parse(streamUrl), resolvedTrack, startPositionMs)
 
                         // Trigger background queue expansion if the current queue is small
                         maybeExpandQueue(track.id)
@@ -301,7 +320,7 @@ class AudioPlayerManager(
      * Also synchronizes song title, artist, album, and artwork URI into MediaMetadata
      * so Android SystemUI notifications and lock screen media players show rich artwork.
      */
-    private fun playDirectUri(mediaUri: Uri, track: Track) {
+    private fun playDirectUri(mediaUri: Uri, track: Track, startPositionMs: Long = 0L) {
         val artworkUri = if (track.thumbnailUrl.isNotBlank()) {
             try {
                 Uri.parse(track.thumbnailUrl)
@@ -330,6 +349,9 @@ class AudioPlayerManager(
             .build()
 
         exoPlayer.setMediaItem(exoItem)
+        if (startPositionMs > 0L) {
+            exoPlayer.seekTo(startPositionMs)
+        }
         exoPlayer.prepare()
         exoPlayer.play()
 
@@ -611,16 +633,40 @@ class AudioPlayerManager(
     }
 
     /**
+     * Pauses playback.
+     *
+     * @param isRemoteSync Whether this command was received from a remote Duo peer (anti-echo flag).
+     */
+    fun pause(isRemoteSync: Boolean = false) {
+        exoPlayer.pause()
+        if (!isRemoteSync) {
+            duoSyncDispatcher?.invoke(DuoAction.PAUSE, _playerState.value.currentTrack, exoPlayer.currentPosition)
+        }
+    }
+
+    /**
+     * Resumes playback.
+     *
+     * @param isRemoteSync Whether this command was received from a remote Duo peer (anti-echo flag).
+     */
+    fun resume(isRemoteSync: Boolean = false) {
+        exoPlayer.play()
+        if (!isRemoteSync) {
+            duoSyncDispatcher?.invoke(DuoAction.PLAY, _playerState.value.currentTrack, exoPlayer.currentPosition)
+        }
+    }
+
+    /**
      * Toggles play/pause state.
      */
     fun togglePlayPause() {
         if (exoPlayer.isPlaying) {
-            exoPlayer.pause()
+            pause()
         } else {
             if (exoPlayer.playbackState == Player.STATE_IDLE && _playerState.value.currentTrack != null) {
                 playTrack(_playerState.value.currentTrack!!)
             } else {
-                exoPlayer.play()
+                resume()
             }
         }
     }
@@ -702,11 +748,17 @@ class AudioPlayerManager(
 
     /**
      * Seeks playback position to a target timestamp in milliseconds.
+     *
+     * @param positionMs Target playback timestamp.
+     * @param isRemoteSync Whether this seek was triggered by a remote Duo peer (anti-echo flag).
      */
-    fun seekTo(positionMs: Long) {
+    fun seekTo(positionMs: Long, isRemoteSync: Boolean = false) {
         val safePosition = positionMs.coerceAtLeast(0L)
         exoPlayer.seekTo(safePosition)
         syncProgress()
+        if (!isRemoteSync) {
+            duoSyncDispatcher?.invoke(DuoAction.SEEK, _playerState.value.currentTrack, safePosition)
+        }
     }
 
     /**
