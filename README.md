@@ -20,6 +20,24 @@ Inspired by **[SimpMusic](https://github.com/maxrave-dev/SimpMusic)**.
 
 ---
 
+## **Screenshots**
+
+<div align="center">
+
+| Home Feed | Now Playing | Lunify Duo |
+| :---: | :---: | :---: |
+| <img src="assets/screenshots/01_home_feed.png" width="270" alt="Home Feed" /> | <img src="assets/screenshots/02_now_playing.png" width="270" alt="Now Playing" /> | <img src="assets/screenshots/03_duo_session.png" width="270" alt="Lunify Duo" /> |
+
+<br />
+
+| Your Library | Settings & Audio Engine | Search & Discovery |
+| :---: | :---: | :---: |
+| <img src="assets/screenshots/04_library.png" width="270" alt="Your Library" /> | <img src="assets/screenshots/05_settings.png" width="270" alt="Settings & Audio Engine" /> | <img src="assets/screenshots/06_search_discovery.png" width="270" alt="Search & Discovery" /> |
+
+</div>
+
+---
+
 ## Features
 
 ### Ad-Free YouTube Music Streaming
