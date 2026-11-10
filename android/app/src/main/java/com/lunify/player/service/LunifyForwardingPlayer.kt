@@ -4,6 +4,7 @@ import androidx.annotation.OptIn
 import androidx.media3.common.ForwardingPlayer
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
+import com.lunify.domain.model.RepeatMode
 import com.lunify.player.AudioPlayerManager
 
 /**
@@ -77,5 +78,20 @@ class LunifyForwardingPlayer(
 
     override fun seekToPreviousMediaItem() {
         audioPlayerManager.playPrevious()
+    }
+
+    override fun setShuffleModeEnabled(shuffleModeEnabled: Boolean) {
+        super.setShuffleModeEnabled(shuffleModeEnabled)
+        audioPlayerManager.setShuffleMode(shuffleModeEnabled)
+    }
+
+    override fun setRepeatMode(repeatMode: Int) {
+        super.setRepeatMode(repeatMode)
+        val targetMode = when (repeatMode) {
+            Player.REPEAT_MODE_ONE -> RepeatMode.ONE
+            Player.REPEAT_MODE_ALL -> RepeatMode.ALL
+            else -> RepeatMode.OFF
+        }
+        audioPlayerManager.setRepeatMode(targetMode)
     }
 }

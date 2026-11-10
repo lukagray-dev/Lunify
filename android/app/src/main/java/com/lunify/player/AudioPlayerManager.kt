@@ -103,6 +103,8 @@ class AudioPlayerManager(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var progressTickerJob: Job? = null
     private var streamResolutionJob: Job? = null
+    private var lastNextClickTime = 0L
+    private var lastPrevClickTime = 0L
 
     companion object {
         private const val TAG = "AudioPlayerManager"
@@ -733,8 +735,16 @@ class AudioPlayerManager(
 
     /**
      * Moves to the next track in the queue.
+     * Includes a 350ms debounce threshold to prevent duplicate triggers from notification / headset intents.
      */
     fun playNext() {
+        val now = System.currentTimeMillis()
+        if (now - lastNextClickTime < 350L) {
+            Log.d(TAG, "Ignoring duplicate playNext event within 350ms")
+            return
+        }
+        lastNextClickTime = now
+
         val currentState = _playerState.value
         val queue = currentState.queue
         if (queue.isEmpty()) return
@@ -784,8 +794,16 @@ class AudioPlayerManager(
      *   restart the track from the beginning (0ms).
      * - If the track has played 3 SECONDS OR LESS (<= 3000ms), navigate to the
      *   previous track in the queue.
+     * Includes a 350ms debounce threshold to prevent duplicate triggers from notification / headset intents.
      */
     fun playPrevious() {
+        val now = System.currentTimeMillis()
+        if (now - lastPrevClickTime < 350L) {
+            Log.d(TAG, "Ignoring duplicate playPrevious event within 350ms")
+            return
+        }
+        lastPrevClickTime = now
+
         val currentPositionMs = exoPlayer.currentPosition
         val currentState = _playerState.value
 
@@ -832,13 +850,19 @@ class AudioPlayerManager(
             RepeatMode.ONE -> RepeatMode.OFF
         }
 
-        when (nextMode) {
+        setRepeatMode(nextMode)
+    }
+
+    /**
+     * Explicitly sets repeat mode (OFF, ALL, ONE) and updates ExoPlayer and reactive state.
+     */
+    fun setRepeatMode(mode: RepeatMode) {
+        when (mode) {
             RepeatMode.OFF -> exoPlayer.repeatMode = Player.REPEAT_MODE_OFF
             RepeatMode.ALL -> exoPlayer.repeatMode = Player.REPEAT_MODE_ALL
             RepeatMode.ONE -> exoPlayer.repeatMode = Player.REPEAT_MODE_ONE
         }
-
-        _playerState.update { it.copy(repeatMode = nextMode) }
+        _playerState.update { it.copy(repeatMode = mode) }
     }
 
     /**
@@ -846,8 +870,15 @@ class AudioPlayerManager(
      */
     fun toggleShuffle() {
         val nextShuffle = !_playerState.value.isShuffle
-        exoPlayer.shuffleModeEnabled = nextShuffle
-        _playerState.update { it.copy(isShuffle = nextShuffle) }
+        setShuffleMode(nextShuffle)
+    }
+
+    /**
+     * Explicitly sets shuffle mode and updates ExoPlayer and reactive state.
+     */
+    fun setShuffleMode(enabled: Boolean) {
+        exoPlayer.shuffleModeEnabled = enabled
+        _playerState.update { it.copy(isShuffle = enabled) }
     }
 
     /**

@@ -63,6 +63,7 @@ object LucideIcons {
     val SkipForward = R.drawable.ic_lucide_skip_forward
     val SkipBack = R.drawable.ic_lucide_skip_back
     val Repeat = R.drawable.ic_lucide_repeat
+    val RepeatOne = R.drawable.ic_lucide_repeat_one
     val Shuffle = R.drawable.ic_lucide_shuffle
     val Volume2 = R.drawable.ic_lucide_volume_2
     val VolumeX = R.drawable.ic_lucide_volume_x

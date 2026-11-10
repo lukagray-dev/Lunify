@@ -68,6 +68,45 @@ class LunifyMediaService : MediaSessionService() {
         const val NOTIFICATION_CHANNEL_ID = "lunify_playback_channel"
         const val ACTION_SHUFFLE = "com.lunify.action.SHUFFLE"
         const val ACTION_REPEAT = "com.lunify.action.REPEAT"
+
+        /**
+         * Builds custom CommandButtons for Shuffle and Repeat to display in the system notification shade.
+         * Matches the full-screen player appearance:
+         * - Enabled: Pure White (#FFFFFFFF)
+         * - Disabled / Off: Muted Gray (#FF8A8A93)
+         */
+        fun buildMediaButtons(state: PlayerState): List<CommandButton> {
+            val shuffleIcon = if (state.isShuffle) {
+                CommandButton.ICON_SHUFFLE_ON
+            } else {
+                CommandButton.ICON_SHUFFLE_OFF
+            }
+            val shuffleResId = if (state.isShuffle) {
+                R.drawable.ic_lucide_shuffle
+            } else {
+                R.drawable.ic_lucide_shuffle_off
+            }
+            val shuffleButton = CommandButton.Builder(shuffleIcon)
+                .setDisplayName(if (state.isShuffle) "Shuffle On" else "Shuffle Off")
+                .setCustomIconResId(shuffleResId)
+                .setSessionCommand(SessionCommand(ACTION_SHUFFLE, Bundle()))
+                .setEnabled(true)
+                .build()
+
+            val (repeatIcon, repeatName, repeatResId) = when (state.repeatMode) {
+                RepeatMode.ONE -> Triple(CommandButton.ICON_REPEAT_ONE, "Repeat One", R.drawable.ic_lucide_repeat_one)
+                RepeatMode.ALL -> Triple(CommandButton.ICON_REPEAT_ALL, "Repeat All", R.drawable.ic_lucide_repeat)
+                RepeatMode.OFF -> Triple(CommandButton.ICON_REPEAT_OFF, "Repeat Off", R.drawable.ic_lucide_repeat_off)
+            }
+            val repeatButton = CommandButton.Builder(repeatIcon)
+                .setDisplayName(repeatName)
+                .setCustomIconResId(repeatResId)
+                .setSessionCommand(SessionCommand(ACTION_REPEAT, Bundle()))
+                .setEnabled(true)
+                .build()
+
+            return listOf(shuffleButton, repeatButton)
+        }
     }
 
     override fun onCreate() {
@@ -154,33 +193,15 @@ class LunifyMediaService : MediaSessionService() {
      * notification shade and lockscreen controls.
      */
     private fun updateMediaButtonPreferences(state: PlayerState) {
-        val shuffleIcon = if (state.isShuffle) {
-            CommandButton.ICON_SHUFFLE_ON
-        } else {
-            CommandButton.ICON_SHUFFLE_OFF
+        val session = mediaSession ?: return
+        val customButtons = buildMediaButtons(state)
+        session.setCustomLayout(customButtons)
+        session.setMediaButtonPreferences(customButtons)
+        try {
+            onUpdateNotification(session, false)
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to force notification update: ${e.message}")
         }
-        val shuffleButton = CommandButton.Builder(shuffleIcon)
-            .setDisplayName(if (state.isShuffle) "Shuffle On" else "Shuffle Off")
-            .setCustomIconResId(R.drawable.ic_lucide_shuffle)
-            .setSessionCommand(SessionCommand(ACTION_SHUFFLE, Bundle()))
-            .setEnabled(true)
-            .build()
-
-        val (repeatIcon, repeatName) = when (state.repeatMode) {
-            RepeatMode.ONE -> Pair(CommandButton.ICON_REPEAT_ONE, "Repeat One")
-            RepeatMode.ALL -> Pair(CommandButton.ICON_REPEAT_ALL, "Repeat All")
-            RepeatMode.OFF -> Pair(CommandButton.ICON_REPEAT_OFF, "Repeat Off")
-        }
-        val repeatButton = CommandButton.Builder(repeatIcon)
-            .setDisplayName(repeatName)
-            .setCustomIconResId(R.drawable.ic_lucide_repeat)
-            .setSessionCommand(SessionCommand(ACTION_REPEAT, Bundle()))
-            .setEnabled(true)
-            .build()
-
-        val customButtons = listOf(shuffleButton, repeatButton)
-        mediaSession?.setCustomLayout(customButtons)
-        mediaSession?.setMediaButtonPreferences(customButtons)
     }
 
     /**

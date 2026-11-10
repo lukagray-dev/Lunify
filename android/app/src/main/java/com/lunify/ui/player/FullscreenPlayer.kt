@@ -403,7 +403,7 @@ fun FullscreenPlayer(
 
                 // Repeat Button (Off / All / One)
                 LucideIconButton(
-                    iconRes = LucideIcons.Repeat,
+                    iconRes = if (playerState.repeatMode == RepeatMode.ONE) LucideIcons.RepeatOne else LucideIcons.Repeat,
                     contentDescription = "Repeat",
                     onClick = onToggleRepeat,
                     iconSize = 22.dp,

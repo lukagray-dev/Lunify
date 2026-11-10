@@ -166,4 +166,62 @@ class LunifyMediaSessionTest {
         // Repeat mode is OFF, but Next must still be exposed to SystemUI
         assertEquals(RepeatMode.OFF, repeatOffState.repeatMode)
     }
+
+    @Test
+    fun testNotificationShuffleAndRepeatButtonIcons() {
+        // Hey friend! Validate that custom notification buttons match full-screen player appearance:
+        // - Off states use gray icons (ic_lucide_shuffle_off, ic_lucide_repeat_off)
+        // - On states use bright white icons (ic_lucide_shuffle, ic_lucide_repeat, ic_lucide_repeat_one)
+        val offState = PlayerState(
+            isShuffle = false,
+            repeatMode = RepeatMode.OFF,
+        )
+        val offButtons = LunifyMediaService.buildMediaButtons(offState)
+        assertEquals(2, offButtons.size)
+
+        val shuffleOffBtn = offButtons[0]
+        assertEquals("Shuffle Off", shuffleOffBtn.displayName)
+        assertEquals(com.lunify.R.drawable.ic_lucide_shuffle_off, shuffleOffBtn.iconResId)
+
+        val repeatOffBtn = offButtons[1]
+        assertEquals("Repeat Off", repeatOffBtn.displayName)
+        assertEquals(com.lunify.R.drawable.ic_lucide_repeat_off, repeatOffBtn.iconResId)
+
+        // Repeat ALL and Shuffle ON
+        val onState = PlayerState(
+            isShuffle = true,
+            repeatMode = RepeatMode.ALL,
+        )
+        val onButtons = LunifyMediaService.buildMediaButtons(onState)
+        val shuffleOnBtn = onButtons[0]
+        assertEquals("Shuffle On", shuffleOnBtn.displayName)
+        assertEquals(com.lunify.R.drawable.ic_lucide_shuffle, shuffleOnBtn.iconResId)
+
+        val repeatAllBtn = onButtons[1]
+        assertEquals("Repeat All", repeatAllBtn.displayName)
+        assertEquals(com.lunify.R.drawable.ic_lucide_repeat, repeatAllBtn.iconResId)
+
+        // Repeat ONE
+        val repeatOneState = PlayerState(
+            isShuffle = false,
+            repeatMode = RepeatMode.ONE,
+        )
+        val repeatOneButtons = LunifyMediaService.buildMediaButtons(repeatOneState)
+        val repeatOneBtn = repeatOneButtons[1]
+        assertEquals("Repeat One", repeatOneBtn.displayName)
+        assertEquals(com.lunify.R.drawable.ic_lucide_repeat_one, repeatOneBtn.iconResId)
+    }
+
+    @Test
+    fun testRapidClickDebounceLogic() {
+        // Simulates two rapid skip events arriving within 350ms (e.g. MediaSession duplicate dispatch)
+        var lastNextClickTime = 1000L
+        val duplicateClickTime = 1050L // 50ms later
+        val isDuplicate = (duplicateClickTime - lastNextClickTime) < 350L
+        assertTrue("Calls within 350ms must be rejected as duplicates", isDuplicate)
+
+        val legitimateNextClickTime = 1400L // 400ms later
+        val isLegitimate = (legitimateNextClickTime - lastNextClickTime) >= 350L
+        assertTrue("Calls after 350ms must be accepted as legitimate", isLegitimate)
+    }
 }

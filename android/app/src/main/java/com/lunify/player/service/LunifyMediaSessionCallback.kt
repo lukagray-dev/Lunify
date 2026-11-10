@@ -70,7 +70,7 @@ class LunifyMediaSessionCallback(
             .addAllCommands()
             .build()
 
-        val initialButtons = buildCustomLayout(audioPlayerManager.playerState.value)
+        val initialButtons = LunifyMediaService.buildMediaButtons(audioPlayerManager.playerState.value)
 
         return MediaSession.ConnectionResult.AcceptedResultBuilder(session)
             .setAvailableSessionCommands(sessionCommands)
@@ -104,6 +104,14 @@ class LunifyMediaSessionCallback(
 
     /**
      * Intercepts standard Player commands (Next, Previous, Play/Pause, Shuffle, Repeat).
+     *
+     * IMPORTANT ARCHITECTURAL NOTE:
+     * In Android Media3, returning [SessionResult.RESULT_SUCCESS] authorizes the MediaSession
+     * to dispatch the command directly to the active player ([LunifyForwardingPlayer]).
+     *
+     * We MUST NOT execute [AudioPlayerManager.playNext] or [AudioPlayerManager.playPrevious]
+     * directly inside this callback method, because doing so causes the command to be executed
+     * twice (once in this callback, and once by the forwarding player), skipping two tracks!
      */
     @Deprecated("Deprecated in Java in Media3 Callback")
     @Suppress("DEPRECATION")
@@ -112,65 +120,7 @@ class LunifyMediaSessionCallback(
         controller: MediaSession.ControllerInfo,
         playerCommand: Int,
     ): Int {
-        Log.d(TAG, "Received player command request: $playerCommand")
-        when (playerCommand) {
-            Player.COMMAND_SEEK_TO_NEXT,
-            Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM -> {
-                audioPlayerManager.playNext()
-                return SessionResult.RESULT_SUCCESS
-            }
-            Player.COMMAND_SEEK_TO_PREVIOUS,
-            Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM -> {
-                audioPlayerManager.playPrevious()
-                return SessionResult.RESULT_SUCCESS
-            }
-            Player.COMMAND_PLAY_PAUSE -> {
-                audioPlayerManager.togglePlayPause()
-                return SessionResult.RESULT_SUCCESS
-            }
-            Player.COMMAND_SET_SHUFFLE_MODE -> {
-                audioPlayerManager.toggleShuffle()
-                return SessionResult.RESULT_SUCCESS
-            }
-            Player.COMMAND_SET_REPEAT_MODE -> {
-                audioPlayerManager.toggleRepeat()
-                return SessionResult.RESULT_SUCCESS
-            }
-        }
-        return super.onPlayerCommandRequest(session, controller, playerCommand)
-    }
-
-    /**
-     * Builds the custom command button list for Shuffle and Repeat to be displayed
-     * in the system media notification shade.
-     */
-    private fun buildCustomLayout(state: PlayerState): List<CommandButton> {
-        val shuffleIcon = if (state.isShuffle) {
-            CommandButton.ICON_SHUFFLE_ON
-        } else {
-            CommandButton.ICON_SHUFFLE_OFF
-        }
-
-        val shuffleButton = CommandButton.Builder(shuffleIcon)
-            .setDisplayName(if (state.isShuffle) "Shuffle On" else "Shuffle Off")
-            .setCustomIconResId(R.drawable.ic_lucide_shuffle)
-            .setSessionCommand(SessionCommand(LunifyMediaService.ACTION_SHUFFLE, Bundle()))
-            .setEnabled(true)
-            .build()
-
-        val (repeatIcon, repeatName) = when (state.repeatMode) {
-            RepeatMode.ONE -> Pair(CommandButton.ICON_REPEAT_ONE, "Repeat One")
-            RepeatMode.ALL -> Pair(CommandButton.ICON_REPEAT_ALL, "Repeat All")
-            RepeatMode.OFF -> Pair(CommandButton.ICON_REPEAT_OFF, "Repeat Off")
-        }
-
-        val repeatButton = CommandButton.Builder(repeatIcon)
-            .setDisplayName(repeatName)
-            .setCustomIconResId(R.drawable.ic_lucide_repeat)
-            .setSessionCommand(SessionCommand(LunifyMediaService.ACTION_REPEAT, Bundle()))
-            .setEnabled(true)
-            .build()
-
-        return listOf(shuffleButton, repeatButton)
+        Log.d(TAG, "Authorizing player command request: $playerCommand from ${controller.packageName}")
+        return SessionResult.RESULT_SUCCESS
     }
 }
