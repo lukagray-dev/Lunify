@@ -84,6 +84,40 @@ class OnlineMusicRepository(
     }
 
     /**
+     * Fetches tracks matching the specified mood filter (e.g. Relax, Workout, Focus).
+     */
+    suspend fun getMoodTracks(moodId: String): Result<List<Track>> = withContext(Dispatchers.IO) {
+        val query = when (moodId.lowercase()) {
+            "relax" -> "Relaxing chill acoustic songs"
+            "workout" -> "Workout gym motivation hype songs"
+            "energize" -> "Upbeat energizing pop dance"
+            "focus" -> "Deep focus study beats instrumental"
+            "commute" -> "Road trip commute driving songs"
+            "party" -> "Party dance club hits upbeat"
+            "sleep" -> "Sleep relaxation ambient peaceful"
+            else -> return@withContext getHomeQuickPicks()
+        }
+        client.searchSongs(query, YouTubeMusicClient.FILTER_SONGS)
+    }
+
+    /**
+     * Fetches playlists and albums matching the specified mood filter.
+     */
+    suspend fun getMoodAlbums(moodId: String): Result<List<Album>> = withContext(Dispatchers.IO) {
+        val query = when (moodId.lowercase()) {
+            "relax" -> "Relaxing chill vibes playlist"
+            "workout" -> "Workout gym motivation playlist"
+            "energize" -> "Energizing upbeat dance playlist"
+            "focus" -> "Deep focus study beats playlist"
+            "commute" -> "Road trip commute playlist"
+            "party" -> "Party dance hits playlist"
+            "sleep" -> "Sleep ambient peaceful playlist"
+            else -> return@withContext getHomeTrending()
+        }
+        client.searchAlbums(query)
+    }
+
+    /**
      * Resolves the playable direct audio streaming URL for a YouTube video ID conforming to [quality].
      */
     suspend fun getAudioStreamUrl(

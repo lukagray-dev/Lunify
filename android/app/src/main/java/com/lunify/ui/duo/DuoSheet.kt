@@ -17,15 +17,18 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -123,13 +126,14 @@ fun DuoSheet(
     Box(
         modifier = modifier
             .fillMaxWidth()
+            .imePadding()
+            .navigationBarsPadding()
             .liquidGlass(
                 shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
                 backgroundColor = GlassSheetBackground,
                 interactive = false,
                 borderWidth = 1.dp,
-            )
-            .navigationBarsPadding(),
+            ),
     ) {
         Column(
             modifier = Modifier
@@ -274,11 +278,15 @@ fun DuoSheet(
 
             if (connectionState != DuoConnectionState.CONNECTED && connectionState != DuoConnectionState.SYNCING) {
                 // ==============================================================
-                // State A: Disconnected / Hosting / Pairing Mode
+                // State A: Disconnected / Hosting / Pairing Mode (Scrollable for IME Insets)
                 // ==============================================================
-
-                // --------------------------------------------------------------
-                // Incoming Pairing Request Card (Host Confirmation Prompt)
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState()),
+                ) {
+                    // --------------------------------------------------------------
+                    // Incoming Pairing Request Card (Host Confirmation Prompt)
                 // --------------------------------------------------------------
                 if (connectionState == DuoConnectionState.INCOMING_REQUEST && incomingRequest != null) {
                     LiquidGlassContainer(
@@ -595,7 +603,8 @@ fun DuoSheet(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
             } else {
                 // ==============================================================
                 // State B: Connected Live Sync Session

@@ -51,6 +51,8 @@ fun QuickPicksSection(
     onTrackClick: (Track) -> Unit,
     onMoreClick: (Track) -> Unit,
     isLoading: Boolean = false,
+    title: String = "Quick Picks",
+    subtitle: String = "START RADIO FROM A SONG",
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier.fillMaxWidth()) {
@@ -63,14 +65,14 @@ fun QuickPicksSection(
         ) {
             Column {
                 Text(
-                    text = "START RADIO FROM A SONG",
+                    text = subtitle,
                     color = TextMuted,
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
                     letterSpacing = 0.8.sp,
                 )
                 Text(
-                    text = "Quick Picks",
+                    text = title,
                     color = TextPrimary,
                     fontSize = 20.sp,
                     fontWeight = FontWeight.Bold,
