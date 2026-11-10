@@ -88,6 +88,7 @@ fun SearchScreen(
     onTrackSelect: (Track) -> Unit,
     onPlayQueue: (List<Track>, Track) -> Unit = { _, t -> onTrackSelect(t) },
     onOpenTrackOptions: (Track) -> Unit = {},
+    onAlbumSelect: (Album) -> Unit = {},
     onlineRepository: OnlineMusicRepository = remember { OnlineMusicRepository() },
     modifier: Modifier = Modifier,
 ) {
@@ -381,12 +382,7 @@ fun SearchScreen(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable {
-                                    // Searching for the album name reveals its tracks
-                                    searchQuery = "${album.title} ${album.artist}"
-                                    selectedCategory = "Songs"
-                                    performSearch(searchQuery, "Songs")
-                                },
+                                .clickable { onAlbumSelect(album) },
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             MediaCard(
@@ -394,11 +390,7 @@ fun SearchScreen(
                                 subtitle = album.artist,
                                 thumbnailUrl = album.thumbnailUrl,
                                 cardWidth = 80.dp,
-                                onClick = {
-                                    searchQuery = "${album.title} ${album.artist}"
-                                    selectedCategory = "Songs"
-                                    performSearch(searchQuery, "Songs")
-                                },
+                                onClick = { onAlbumSelect(album) },
                             )
                             Spacer(modifier = Modifier.width(16.dp))
                             Column(modifier = Modifier.weight(1f)) {

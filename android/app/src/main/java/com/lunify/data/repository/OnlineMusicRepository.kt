@@ -128,6 +128,20 @@ class OnlineMusicRepository(
     }
 
     /**
+     * Fetches real playable tracks for an [Album] or playlist.
+     */
+    suspend fun getAlbumTracks(album: Album): Result<List<Track>> = withContext(Dispatchers.IO) {
+        client.getAlbumTracks(album)
+    }
+
+    /**
+     * Fetches top songs for an [Artist].
+     */
+    suspend fun getArtistTopTracks(artist: Artist): Result<List<Track>> = withContext(Dispatchers.IO) {
+        client.getArtistTopTracks(artist)
+    }
+
+    /**
      * Fetches the related radio queue / up-next songs for [videoId].
      */
     suspend fun getRelatedQueue(videoId: String): Result<List<Track>> = withContext(Dispatchers.IO) {

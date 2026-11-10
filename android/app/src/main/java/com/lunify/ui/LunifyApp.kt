@@ -21,6 +21,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -35,6 +36,9 @@ import com.lunify.data.local.SettingsStorage
 import com.lunify.data.repository.LocalAudioRepository
 import com.lunify.data.repository.LyricsRepository
 import com.lunify.data.repository.OnlineLyricsRepository
+import com.lunify.data.repository.OnlineMusicRepository
+import com.lunify.domain.model.Album
+import com.lunify.domain.model.Artist
 import com.lunify.domain.model.LyricLine
 import com.lunify.domain.model.SyncedLyrics
 import com.lunify.domain.model.Track
@@ -43,6 +47,7 @@ import com.lunify.player.AudioPlayerManager
 import com.lunify.player.duo.DuoManager
 import com.lunify.ui.components.AddToPlaylistSheet
 import com.lunify.ui.components.AppBottomNavigationBar
+import com.lunify.ui.components.MediaDetailSheet
 import com.lunify.ui.components.SortOptionsSheet
 import com.lunify.ui.components.TrackOptionsSheet
 import com.lunify.ui.duo.DuoSheet
@@ -53,6 +58,7 @@ import com.lunify.ui.player.FullscreenPlayer
 import com.lunify.ui.player.MiniPlayer
 import com.lunify.ui.player.QueueSheet
 import com.lunify.ui.theme.ObsidianBackground
+import kotlinx.coroutines.launch
 
 /**
  * ==============================================================================
@@ -113,11 +119,21 @@ fun LunifyApp(
         }
     }
 
+    val coroutineScope = rememberCoroutineScope()
+    val onlineMusicRepo = remember { OnlineMusicRepository() }
+
     var isPlayerExpanded by remember { mutableStateOf(false) }
     var showLyrics by remember { mutableStateOf(false) }
     var showQueue by remember { mutableStateOf(false) }
     var showDuoSheet by remember { mutableStateOf(false) }
     var isMiniPlayerDismissed by remember { mutableStateOf(false) }
+
+    // Media Detail Sheet State (Album / Playlist / Artist)
+    var activeAlbumForDetail by remember { mutableStateOf<Album?>(null) }
+    var activeArtistForDetail by remember { mutableStateOf<Artist?>(null) }
+    var detailTracks by remember { mutableStateOf<List<Track>>(emptyList()) }
+    var isLoadingDetailTracks by remember { mutableStateOf(false) }
+    val showMediaDetail = activeAlbumForDetail != null || activeArtistForDetail != null
 
     // Global Modal Sheets State (always hoisted above the bottom dock!)
     var trackForOptions by remember { mutableStateOf<Track?>(null) }
@@ -126,7 +142,7 @@ fun LunifyApp(
     var currentSortOption by remember { mutableStateOf(TrackSortOption.NAME) }
     var libraryRefreshTrigger by remember { mutableStateOf(0) }
 
-    val hasActiveModalSheet = showQueue || showDuoSheet || trackForOptions != null || trackForPlaylist != null || isSortSheetOpen
+    val hasActiveModalSheet = showQueue || showDuoSheet || trackForOptions != null || trackForPlaylist != null || isSortSheetOpen || showMediaDetail
 
     Box(
         modifier = modifier
@@ -148,9 +164,25 @@ fun LunifyApp(
                 audioPlayerManager.playTrack(track, queue)
             },
             onAlbumSelect = { album ->
-                isMiniPlayerDismissed = false
-                if (playerState.queue.isNotEmpty()) {
-                    audioPlayerManager.playTrack(playerState.queue.first())
+                activeArtistForDetail = null
+                activeAlbumForDetail = album
+                isLoadingDetailTracks = true
+                detailTracks = emptyList()
+                coroutineScope.launch {
+                    val result = onlineMusicRepo.getAlbumTracks(album)
+                    detailTracks = result.getOrElse { emptyList() }
+                    isLoadingDetailTracks = false
+                }
+            },
+            onArtistSelect = { artist ->
+                activeAlbumForDetail = null
+                activeArtistForDetail = artist
+                isLoadingDetailTracks = true
+                detailTracks = emptyList()
+                coroutineScope.launch {
+                    val result = onlineMusicRepo.getArtistTopTracks(artist)
+                    detailTracks = result.getOrElse { emptyList() }
+                    isLoadingDetailTracks = false
                 }
             },
             onOpenDuo = { showDuoSheet = true },
@@ -276,6 +308,9 @@ fun LunifyApp(
                         trackForOptions = null
                         trackForPlaylist = null
                         isSortSheetOpen = false
+                        activeAlbumForDetail = null
+                        activeArtistForDetail = null
+                        detailTracks = emptyList()
                     },
             )
         }
@@ -437,6 +472,50 @@ fun LunifyApp(
                     onClose = { trackForPlaylist = null },
                 )
             }
+        }
+
+        // ----------------------------------------------------------------------
+        // 10. Media Detail Pop-up Sheet (Album / Playlist / Artist)
+        // ----------------------------------------------------------------------
+        AnimatedVisibility(
+            visible = showMediaDetail,
+            enter = slideInVertically { it } + fadeIn(),
+            exit = slideOutVertically { it } + fadeOut(),
+            modifier = Modifier.align(Alignment.BottomCenter),
+        ) {
+            MediaDetailSheet(
+                title = activeAlbumForDetail?.title ?: activeArtistForDetail?.name ?: "",
+                subtitle = activeAlbumForDetail?.artist ?: "Artist Top Songs",
+                thumbnailUrl = activeAlbumForDetail?.thumbnailUrl ?: activeArtistForDetail?.thumbnailUrl ?: "",
+                isArtist = activeArtistForDetail != null,
+                tracks = detailTracks,
+                isLoading = isLoadingDetailTracks,
+                activeTrackId = playerState.currentTrack?.id,
+                isPlaying = playerState.isPlaying,
+                onTrackClick = { track ->
+                    isMiniPlayerDismissed = false
+                    audioPlayerManager.playTrack(track, detailTracks)
+                },
+                onPlayAll = {
+                    if (detailTracks.isNotEmpty()) {
+                        isMiniPlayerDismissed = false
+                        audioPlayerManager.playTrack(detailTracks.first(), detailTracks)
+                    }
+                },
+                onShuffle = {
+                    if (detailTracks.isNotEmpty()) {
+                        val shuffled = detailTracks.shuffled()
+                        isMiniPlayerDismissed = false
+                        audioPlayerManager.playTrack(shuffled.first(), shuffled)
+                    }
+                },
+                onMoreClick = { track -> trackForOptions = track },
+                onClose = {
+                    activeAlbumForDetail = null
+                    activeArtistForDetail = null
+                    detailTracks = emptyList()
+                },
+            )
         }
     }
 }

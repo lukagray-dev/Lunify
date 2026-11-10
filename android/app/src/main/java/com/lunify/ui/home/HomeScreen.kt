@@ -8,6 +8,7 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -116,6 +117,7 @@ fun HomeScreen(
     playerState: PlayerState,
     onTrackSelect: (Track) -> Unit,
     onAlbumSelect: (Album) -> Unit,
+    onArtistSelect: (Artist) -> Unit = {},
     onOpenSettings: () -> Unit,
     onOpenDuo: () -> Unit,
     onPlayQueue: (List<Track>, Track) -> Unit = { _, t -> onTrackSelect(t) },
@@ -167,6 +169,7 @@ fun HomeScreen(
 
     val pullAnimatable = remember { Animatable(0f) }
     var isRefreshing by remember { mutableStateOf(false) }
+    var canPullRefresh by remember { mutableStateOf(false) }
 
     // Infinite rotation for the spinner when active
     val infiniteTransition = rememberInfiniteTransition(label = "pullSpinnerTransition")
@@ -183,6 +186,17 @@ fun HomeScreen(
     val nestedScrollConnection = remember(selectedMoodId, isRefreshing) {
         object : NestedScrollConnection {
             override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                val isAtTop = lazyListState.firstVisibleItemIndex == 0 &&
+                        lazyListState.firstVisibleItemScrollOffset == 0
+
+                // Strictly ensure pull-to-refresh can ONLY start when already at the absolute top of the feed.
+                // Any motion while not at top, or from momentum flings from below, resets this flag.
+                if (!isAtTop) {
+                    canPullRefresh = false
+                } else if (source == NestedScrollSource.UserInput && !lazyListState.isScrollInProgress && pullAnimatable.value == 0f) {
+                    canPullRefresh = true
+                }
+
                 // If indicator is visible and user is scrolling upwards, collapse indicator first
                 if (!isRefreshing && pullAnimatable.value > 0f && available.y < 0f) {
                     val consumedY = available.y.coerceAtLeast(-pullAnimatable.value)
@@ -199,11 +213,13 @@ fun HomeScreen(
                 available: Offset,
                 source: NestedScrollSource,
             ): Offset {
-                // When at the very top of LazyColumn and user pulls downwards:
                 val isAtTop = lazyListState.firstVisibleItemIndex == 0 &&
                         lazyListState.firstVisibleItemScrollOffset == 0
 
-                if (!isRefreshing && available.y > 0f && isAtTop) {
+                // Only accumulate pull distance if:
+                // 1. Gesture is direct finger touch (NOT momentum/fling from bottom)
+                // 2. Gesture originated while already at the top of the list
+                if (!isRefreshing && canPullRefresh && source == NestedScrollSource.UserInput && available.y > 0f && isAtTop) {
                     val dampedDelta = available.y * 0.45f // Damping friction like Chrome
                     val target = (pullAnimatable.value + dampedDelta).coerceAtMost(maxPullDistancePx)
                     coroutineScope.launch {
@@ -215,7 +231,7 @@ fun HomeScreen(
             }
 
             override suspend fun onPreFling(available: Velocity): Velocity {
-                if (!isRefreshing && pullAnimatable.value >= pullRefreshThresholdPx) {
+                if (!isRefreshing && canPullRefresh && pullAnimatable.value >= pullRefreshThresholdPx) {
                     // Trigger hard refresh!
                     isRefreshing = true
                     coroutineScope.launch {
@@ -239,6 +255,7 @@ fun HomeScreen(
                             }
                         } finally {
                             isRefreshing = false
+                            canPullRefresh = false
                             pullAnimatable.animateTo(
                                 targetValue = 0f,
                                 animationSpec = spring(stiffness = 300f),
@@ -248,6 +265,7 @@ fun HomeScreen(
                     return available
                 } else if (!isRefreshing && pullAnimatable.value > 0f) {
                     // Pull wasn't deep enough: snap back offscreen smoothly
+                    canPullRefresh = false
                     coroutineScope.launch {
                         pullAnimatable.animateTo(
                             targetValue = 0f,
@@ -256,6 +274,12 @@ fun HomeScreen(
                     }
                     return Velocity.Zero
                 }
+                canPullRefresh = false
+                return Velocity.Zero
+            }
+
+            override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity {
+                canPullRefresh = false
                 return Velocity.Zero
             }
         }
@@ -609,7 +633,10 @@ fun HomeScreen(
                                 items(topArtists) { artist ->
                                     Column(
                                         horizontalAlignment = Alignment.CenterHorizontally,
-                                        modifier = Modifier.width(90.dp),
+                                        modifier = Modifier
+                                            .width(90.dp)
+                                            .clip(RoundedCornerShape(12.dp))
+                                            .clickable { onArtistSelect(artist) },
                                     ) {
                                         Box(
                                             modifier = Modifier

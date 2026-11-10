@@ -906,4 +906,128 @@ class YouTubeMusicClient(
             0L
         }
     }
+
+    /**
+     * Fetches real playable tracks for an [Album] or playlist.
+     * Uses InnerTube browse endpoint with fallback to search if browse ID is unavailable.
+     */
+    suspend fun getAlbumTracks(album: Album): Result<List<Track>> = withContext(Dispatchers.IO) {
+        try {
+            // 1. If album has an InnerTube browse ID, query the browse endpoint directly
+            val browseId = album.id
+            if (browseId.isNotBlank() && browseId != album.title &&
+                (browseId.startsWith("MPRE") || browseId.startsWith("VL") || browseId.startsWith("PL") || browseId.startsWith("RD") || browseId.startsWith("FEmusic"))
+            ) {
+                try {
+                    val effectiveBrowseId = if (browseId.startsWith("PL")) "VL$browseId" else browseId
+                    val payload = JSONObject().apply {
+                        put("context", createBaseContext())
+                        put("browseId", effectiveBrowseId)
+                    }
+                    val jsonString = postInnerTube("browse", payload)
+                    val root = JSONObject(jsonString)
+                    val tracks = parseBrowseTracks(root)
+                    if (tracks.isNotEmpty()) {
+                        return@withContext Result.success(tracks)
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "Browse call failed for album '${album.title}': ${e.message}")
+                }
+            }
+
+            // 2. High-accuracy fallback: search songs matching album and artist
+            val query = if (album.artist.isNotBlank() && !album.artist.contains("YouTube", ignoreCase = true) && !album.artist.contains("Playlist", ignoreCase = true)) {
+                "${album.title} ${album.artist}"
+            } else {
+                album.title
+            }
+            val searchResult = searchSongs(query, FILTER_SONGS)
+            if (searchResult.isSuccess && searchResult.getOrNull()?.isNotEmpty() == true) {
+                return@withContext searchResult
+            }
+
+            Result.success(emptyList())
+        } catch (e: Throwable) {
+            Log.e(TAG, "Failed to load album tracks for '${album.title}': ${e.message}", e)
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Fetches top songs for an [Artist].
+     */
+    suspend fun getArtistTopTracks(artist: Artist): Result<List<Track>> = withContext(Dispatchers.IO) {
+        try {
+            // 1. If artist has a browse ID, query browse endpoint
+            if (artist.id.isNotBlank() && artist.id != artist.name &&
+                (artist.id.startsWith("UC") || artist.id.startsWith("FEartist"))
+            ) {
+                try {
+                    val payload = JSONObject().apply {
+                        put("context", createBaseContext())
+                        put("browseId", artist.id)
+                    }
+                    val jsonString = postInnerTube("browse", payload)
+                    val root = JSONObject(jsonString)
+                    val tracks = parseBrowseTracks(root)
+                    if (tracks.isNotEmpty()) {
+                        return@withContext Result.success(tracks)
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "Browse call failed for artist '${artist.name}': ${e.message}")
+                }
+            }
+
+            // 2. High-accuracy fallback: search top songs for artist
+            val searchResult = searchSongs("${artist.name} songs", FILTER_SONGS)
+            if (searchResult.isSuccess) {
+                return@withContext searchResult
+            }
+            Result.success(emptyList())
+        } catch (e: Throwable) {
+            Log.e(TAG, "Failed to load top tracks for artist '${artist.name}': ${e.message}", e)
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Recursively parses all [Track] items from a YouTube Music browse response.
+     */
+    private fun parseBrowseTracks(root: JSONObject): List<Track> {
+        val tracks = mutableListOf<Track>()
+        try {
+            findResponsiveListItems(root, tracks)
+        } catch (e: Exception) {
+            Log.w(TAG, "Error parsing browse tracks: ${e.message}")
+        }
+        return tracks
+    }
+
+    private fun findResponsiveListItems(json: Any, outList: MutableList<Track>) {
+        when (json) {
+            is JSONObject -> {
+                val itemRenderer = json.optJSONObject("musicResponsiveListItemRenderer")
+                if (itemRenderer != null) {
+                    parseResponsiveListItemToTrack(itemRenderer)?.let { outList.add(it) }
+                } else {
+                    val keys = json.keys()
+                    while (keys.hasNext()) {
+                        val key = keys.next()
+                        val child = json.opt(key)
+                        if (child != null) {
+                            findResponsiveListItems(child, outList)
+                        }
+                    }
+                }
+            }
+            is JSONArray -> {
+                for (i in 0 until json.length()) {
+                    val child = json.opt(i)
+                    if (child != null) {
+                        findResponsiveListItems(child, outList)
+                    }
+                }
+            }
+        }
+    }
 }

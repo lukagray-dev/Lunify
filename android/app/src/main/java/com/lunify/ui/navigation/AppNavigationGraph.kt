@@ -16,6 +16,7 @@ import com.lunify.data.local.LibraryStorage
 import com.lunify.data.local.SettingsStorage
 import com.lunify.data.repository.LocalAudioRepository
 import com.lunify.domain.model.Album
+import com.lunify.domain.model.Artist
 import com.lunify.domain.model.PlayerState
 import com.lunify.domain.model.Track
 import com.lunify.domain.model.TrackSortOption
@@ -49,6 +50,7 @@ fun AppNavigationGraph(
     onTrackSelect: (Track) -> Unit,
     onPlayQueue: (List<Track>, Track) -> Unit,
     onAlbumSelect: (Album) -> Unit,
+    onArtistSelect: (Artist) -> Unit = {},
     onOpenDuo: () -> Unit,
     onOpenTrackOptions: (Track) -> Unit,
     currentSortOption: TrackSortOption,
@@ -108,6 +110,7 @@ fun AppNavigationGraph(
                 onTrackSelect = onTrackSelect,
                 onPlayQueue = onPlayQueue,
                 onAlbumSelect = onAlbumSelect,
+                onArtistSelect = onArtistSelect,
                 onOpenSettings = { navController.navigate(NavRoute.SETTINGS) },
                 onOpenDuo = onOpenDuo,
                 onOpenTrackOptions = onOpenTrackOptions,
@@ -121,6 +124,7 @@ fun AppNavigationGraph(
                 onTrackSelect = onTrackSelect,
                 onPlayQueue = onPlayQueue,
                 onOpenTrackOptions = onOpenTrackOptions,
+                onAlbumSelect = onAlbumSelect,
             )
         }
 
