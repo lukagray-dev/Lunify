@@ -57,4 +57,36 @@ object PlayerCacheManager {
             }
         }
     }
+
+    /**
+     * Returns the total bytes currently stored in the streaming media cache.
+     */
+    fun getCacheSizeBytes(context: Context): Long {
+        return try {
+            getInstance(context).cacheSpace
+        } catch (e: Exception) {
+            0L
+        }
+    }
+
+    /**
+     * Purges all cached media streams from disk and returns the total bytes reclaimed.
+     */
+    fun clearCache(context: Context): Long {
+        return try {
+            val cache = getInstance(context)
+            val bytesBefore = cache.cacheSpace
+            val keys = cache.keys.toList()
+            for (key in keys) {
+                try {
+                    cache.removeResource(key)
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
+            bytesBefore
+        } catch (e: Exception) {
+            0L
+        }
+    }
 }

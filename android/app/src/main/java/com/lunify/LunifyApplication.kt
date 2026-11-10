@@ -2,6 +2,7 @@ package com.lunify
 
 import android.app.Application
 import com.lunify.data.local.LibraryStorage
+import com.lunify.data.local.SettingsStorage
 import com.lunify.data.repository.LocalAudioRepository
 import com.lunify.player.AudioPlayerManager
 import com.lunify.player.duo.DuoManager
@@ -25,7 +26,7 @@ import com.lunify.player.duo.DuoManager
  * If we held the [AudioPlayerManager] inside the [MainActivity], destroying the
  * activity would destroy the player, cutting off the music abruptly!
  *
- * By creating our singletons ([AudioPlayerManager], [LibraryStorage], [LocalAudioRepository])
+ * By creating our singletons ([AudioPlayerManager], [LibraryStorage], [LocalAudioRepository], [SettingsStorage])
  * at the [Application] scope:
  * - The audio player stays alive as long as our process is running.
  * - Both the UI ([MainActivity]) and our background media notification service
@@ -34,6 +35,10 @@ import com.lunify.player.duo.DuoManager
  * ==============================================================================
  */
 class LunifyApplication : Application() {
+
+    // Persistent SharedPreferences storage for user settings
+    lateinit var settingsStorage: SettingsStorage
+        private set
 
     // Persistent JSON library storage for favorites, history, and playlists
     lateinit var libraryStorage: LibraryStorage
@@ -55,17 +60,18 @@ class LunifyApplication : Application() {
         super.onCreate()
         instance = this
 
-        // 1. Initialize local persistent storage
+        // 1. Initialize local persistent settings and library storage
+        settingsStorage = SettingsStorage(applicationContext)
         libraryStorage = LibraryStorage(applicationContext)
 
         // 2. Initialize device audio scanner repository
         localAudioRepository = LocalAudioRepository(applicationContext)
 
         // 3. Initialize the core audio player manager
-        audioPlayerManager = AudioPlayerManager(applicationContext, libraryStorage)
+        audioPlayerManager = AudioPlayerManager(applicationContext, libraryStorage, settingsStorage)
 
         // 4. Initialize Duo synchronization manager
-        duoManager = DuoManager(applicationContext, localAudioRepository, audioPlayerManager)
+        duoManager = DuoManager(applicationContext, localAudioRepository, audioPlayerManager, settingsStorage)
     }
 
     companion object {

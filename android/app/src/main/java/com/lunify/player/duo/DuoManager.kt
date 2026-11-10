@@ -47,6 +47,7 @@ class DuoManager(
     private val context: Context,
     private val localAudioRepository: LocalAudioRepository,
     private val audioPlayerManager: AudioPlayerManager,
+    val settingsStorage: com.lunify.data.local.SettingsStorage = com.lunify.data.local.SettingsStorage(context),
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main),
 ) {
 
@@ -55,10 +56,13 @@ class DuoManager(
     }
 
     private val myDeviceId = "dev_" + UUID.randomUUID().toString().take(8)
-    private val myDeviceName = "${Build.MANUFACTURER.replaceFirstChar { it.uppercase() }} ${Build.MODEL}"
+    private val myDeviceName: String
+        get() = settingsStorage.duoDeviceName.value.ifBlank {
+            "${Build.MANUFACTURER.replaceFirstChar { it.uppercase() }} ${Build.MODEL}"
+        }
 
     // Pluggable transport layer (Paho MQTT Relay)
-    private val transport: DuoTransport = PahoMqttDuoTransport(scope)
+    private val transport: DuoTransport = PahoMqttDuoTransport(scope) { myDeviceName }
 
     // Current room code (e.g., "LN-7842")
     private val _myRoomCode = MutableStateFlow(DuoCodeUtils.generateRoomCode())

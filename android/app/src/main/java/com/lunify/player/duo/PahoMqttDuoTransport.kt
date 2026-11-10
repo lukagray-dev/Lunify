@@ -55,6 +55,9 @@ import java.util.UUID
  */
 class PahoMqttDuoTransport(
     private val scope: CoroutineScope,
+    private val deviceNameProvider: () -> String = {
+        "${Build.MANUFACTURER.replaceFirstChar { it.uppercase() }} ${Build.MODEL}"
+    },
 ) : DuoTransport {
 
     companion object {
@@ -74,7 +77,8 @@ class PahoMqttDuoTransport(
     }
 
     private val myDeviceId = "dev_" + UUID.randomUUID().toString().take(8)
-    private val myDeviceName = "${Build.MANUFACTURER.replaceFirstChar { it.uppercase() }} ${Build.MODEL}"
+    private val myDeviceName: String
+        get() = deviceNameProvider()
 
     private val _connectionState = MutableStateFlow(DuoConnectionState.DISCONNECTED)
     override val connectionState: StateFlow<DuoConnectionState> = _connectionState.asStateFlow()

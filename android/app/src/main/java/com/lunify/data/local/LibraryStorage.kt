@@ -129,6 +129,12 @@ class LibraryStorage(context: Context) {
         persistPlayCountsToDisk()
     }
 
+    @Synchronized
+    fun clearPlayCounts() {
+        playCountsCache.clear()
+        prefs.edit().remove(KEY_PLAY_COUNTS).apply()
+    }
+
     private fun loadPlayCountsFromDisk() {
         playCountsCache.clear()
         val jsonString = prefs.getString(KEY_PLAY_COUNTS, null) ?: return

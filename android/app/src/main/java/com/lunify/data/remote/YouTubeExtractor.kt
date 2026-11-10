@@ -63,12 +63,16 @@ object YouTubeExtractor {
     }
 
     /**
-     * Resolves the best direct audio stream URL for a YouTube [videoId].
+     * Resolves the direct audio stream URL for a YouTube [videoId] conforming to [quality].
      *
      * @param videoId The 11-character YouTube video ID (e.g., "dQw4w9WgXcQ").
+     * @param quality The desired audio bitrate tier (High, Balanced, Data Saver).
      * @return Result containing the direct HTTPS audio streaming URL, or an error.
      */
-    suspend fun getAudioStreamUrl(videoId: String): Result<String> = withContext(Dispatchers.IO) {
+    suspend fun getAudioStreamUrl(
+        videoId: String,
+        quality: com.lunify.data.local.StreamingQuality = com.lunify.data.local.StreamingQuality.HIGH,
+    ): Result<String> = withContext(Dispatchers.IO) {
         ensureInitialized()
 
         try {
@@ -84,22 +88,38 @@ object YouTubeExtractor {
                 streamInfo = StreamInfo.getInfo(ServiceList.YouTube, standardWatchUrl)
             }
 
-            val audioStreams: List<AudioStream> = streamInfo.audioStreams.orEmpty()
-            if (audioStreams.isEmpty()) {
+            val validAudioStreams: List<AudioStream> = streamInfo.audioStreams.orEmpty()
+                .filter { it.content != null && it.content.isNotEmpty() }
+
+            if (validAudioStreams.isEmpty()) {
                 return@withContext Result.failure(IllegalStateException("No audio streams found for videoId: $videoId"))
             }
 
-            // Select the highest quality audio stream based on averageBitrate
-            // Typical itags: 251 (Opus ~160kbps), 140 (M4A ~128kbps), 250 (Opus ~70kbps)
-            val bestAudioStream = audioStreams
-                .filter { it.content != null && it.content.isNotEmpty() }
-                .maxByOrNull { it.averageBitrate }
-                ?: audioStreams.first()
+            // Select stream based on user's configured audio fidelity
+            val selectedAudioStream = when (quality) {
+                com.lunify.data.local.StreamingQuality.HIGH -> {
+                    // Maximum bitrate stream (typically itag 251 Opus ~160kbps)
+                    validAudioStreams.maxByOrNull { it.averageBitrate } ?: validAudioStreams.first()
+                }
+                com.lunify.data.local.StreamingQuality.BALANCED -> {
+                    // Balanced stream closest to ~128 kbps (itag 140 M4A or 128kbps Opus)
+                    validAudioStreams.minByOrNull { kotlin.math.abs(it.averageBitrate - 128000) } ?: validAudioStreams.first()
+                }
+                com.lunify.data.local.StreamingQuality.DATA_SAVER -> {
+                    // Low bandwidth stream (~50-70 kbps) for data saving
+                    val lowOptions = validAudioStreams.filter { it.averageBitrate in 40000..96000 }
+                    if (lowOptions.isNotEmpty()) {
+                        lowOptions.minByOrNull { it.averageBitrate } ?: validAudioStreams.minByOrNull { it.averageBitrate } ?: validAudioStreams.first()
+                    } else {
+                        validAudioStreams.minByOrNull { it.averageBitrate } ?: validAudioStreams.first()
+                    }
+                }
+            }
 
-            val streamUrl = bestAudioStream.content
+            val streamUrl = selectedAudioStream.content
                 ?: return@withContext Result.failure(IllegalStateException("Stream content URL was null for videoId: $videoId"))
 
-            Log.d(TAG, "Resolved stream for $videoId (format=${bestAudioStream.format}, bitrate=${bestAudioStream.averageBitrate}bps)")
+            Log.d(TAG, "Resolved stream for $videoId (quality=$quality, format=${selectedAudioStream.format}, bitrate=${selectedAudioStream.averageBitrate}bps)")
             Result.success(streamUrl)
         } catch (e: Throwable) {
             Log.e(TAG, "Error resolving audio stream for $videoId: ${e.message}", e)

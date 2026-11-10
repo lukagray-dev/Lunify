@@ -31,6 +31,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.compose.ui.platform.LocalContext
 import com.lunify.data.local.LibraryStorage
+import com.lunify.data.local.SettingsStorage
 import com.lunify.data.repository.LocalAudioRepository
 import com.lunify.data.repository.LyricsRepository
 import com.lunify.data.repository.OnlineLyricsRepository
@@ -78,6 +79,7 @@ fun LunifyApp(
     libraryStorage: LibraryStorage,
     localAudioRepository: LocalAudioRepository,
     duoManager: DuoManager,
+    settingsStorage: SettingsStorage = SettingsStorage(LocalContext.current),
     modifier: Modifier = Modifier,
 ) {
     val navController = rememberNavController()
@@ -160,6 +162,7 @@ fun LunifyApp(
             libraryStorage = libraryStorage,
             localAudioRepository = localAudioRepository,
             duoManager = duoManager,
+            settingsStorage = settingsStorage,
         )
 
         // ----------------------------------------------------------------------

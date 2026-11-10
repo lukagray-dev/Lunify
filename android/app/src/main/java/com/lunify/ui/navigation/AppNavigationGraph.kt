@@ -8,10 +8,12 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import com.lunify.data.local.LibraryStorage
+import com.lunify.data.local.SettingsStorage
 import com.lunify.data.repository.LocalAudioRepository
 import com.lunify.domain.model.Album
 import com.lunify.domain.model.PlayerState
@@ -56,6 +58,7 @@ fun AppNavigationGraph(
     libraryStorage: LibraryStorage,
     localAudioRepository: LocalAudioRepository,
     duoManager: DuoManager,
+    settingsStorage: SettingsStorage = SettingsStorage(LocalContext.current),
     modifier: Modifier = Modifier,
 ) {
     NavHost(
@@ -139,6 +142,9 @@ fun AppNavigationGraph(
 
         composable(NavRoute.SETTINGS) {
             SettingsScreen(
+                settingsStorage = settingsStorage,
+                audioPlayerManager = audioPlayerManager,
+                libraryStorage = libraryStorage,
                 onBack = { navController.popBackStack() },
             )
         }

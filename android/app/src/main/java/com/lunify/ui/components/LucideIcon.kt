@@ -86,6 +86,8 @@ object LucideIcons {
     val Close = R.drawable.ic_lucide_close
     val X = R.drawable.ic_lucide_x
     val Wave = R.drawable.ic_lucide_wave
+    val Info = R.drawable.ic_lucide_info
+    val Help = R.drawable.ic_lucide_help
 }
 
 /**

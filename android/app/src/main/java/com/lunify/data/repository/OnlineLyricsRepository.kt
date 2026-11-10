@@ -73,6 +73,85 @@ class OnlineLyricsRepository(
     }
 
     /**
+     * Fetches raw LRC lyrics string from LRCLIB for saving as a companion .lrc file.
+     */
+    suspend fun fetchRawLrc(
+        title: String,
+        artist: String,
+        durationSeconds: Int = 0,
+    ): String? = withContext(Dispatchers.IO) {
+        val cleanTitle = cleanSearchTerm(title)
+        val cleanArtist = cleanSearchTerm(artist)
+        if (cleanTitle.isBlank()) return@withContext null
+
+        val urlBuilder = LRCLIB_GET_URL.toHttpUrlOrNull()?.newBuilder() ?: return@withContext null
+        urlBuilder.addQueryParameter("track_name", cleanTitle)
+        if (cleanArtist.isNotBlank()) {
+            urlBuilder.addQueryParameter("artist_name", cleanArtist)
+        }
+        if (durationSeconds > 0) {
+            urlBuilder.addQueryParameter("duration", durationSeconds.toString())
+        }
+
+        val request = Request.Builder()
+            .url(urlBuilder.build())
+            .get()
+            .addHeader("User-Agent", USER_AGENT)
+            .build()
+
+        try {
+            val response = okHttpClient.newCall(request).execute()
+            if (response.isSuccessful) {
+                val body = response.body?.string().orEmpty()
+                if (body.isNotBlank()) {
+                    val json = JSONObject(body)
+                    val synced = json.optString("syncedLyrics").trim()
+                    if (synced.isNotBlank()) return@withContext synced
+                    val plain = json.optString("plainLyrics").trim()
+                    if (plain.isNotBlank()) return@withContext plain
+                }
+            } else {
+                response.close()
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Exact raw LRC lookup failed: ${e.message}")
+        }
+
+        val query = if (cleanArtist.isNotBlank()) "$cleanTitle $cleanArtist" else cleanTitle
+        val searchUrl = LRCLIB_SEARCH_URL.toHttpUrlOrNull()?.newBuilder() ?: return@withContext null
+        searchUrl.addQueryParameter("q", query)
+
+        val searchRequest = Request.Builder()
+            .url(searchUrl.build())
+            .get()
+            .addHeader("User-Agent", USER_AGENT)
+            .build()
+
+        try {
+            val response = okHttpClient.newCall(searchRequest).execute()
+            if (response.isSuccessful) {
+                val body = response.body?.string().orEmpty()
+                if (body.isNotBlank()) {
+                    val array = JSONArray(body)
+                    for (i in 0 until array.length()) {
+                        val obj = array.optJSONObject(i) ?: continue
+                        val synced = obj.optString("syncedLyrics").trim()
+                        if (synced.isNotBlank()) return@withContext synced
+                    }
+                    val first = array.optJSONObject(0)
+                    val plain = first?.optString("plainLyrics").orEmpty().trim()
+                    if (plain.isNotBlank()) return@withContext plain
+                }
+            } else {
+                response.close()
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Fuzzy raw LRC search failed: ${e.message}")
+        }
+        null
+    }
+
+    /**
      * Calls `GET https://lrclib.net/api/get` with exact parameters.
      */
     private fun queryExactLrcLib(

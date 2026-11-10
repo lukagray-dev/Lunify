@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -13,13 +14,18 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import com.lunify.data.local.LibraryStorage
+import com.lunify.data.local.SettingsStorage
 import com.lunify.data.repository.LocalAudioRepository
 import com.lunify.player.AudioPlayerManager
 import com.lunify.player.duo.DuoManager
 import com.lunify.player.service.LunifyMediaService
 import com.lunify.ui.LunifyApp
 import com.lunify.ui.theme.LunifyTheme
+import kotlinx.coroutines.launch
 
 /**
  * ==============================================================================
@@ -68,6 +74,20 @@ class MainActivity : ComponentActivity() {
         audioPlayerManager = app.audioPlayerManager
         localAudioRepository = app.localAudioRepository
         duoManager = app.duoManager
+        val settingsStorage = app.settingsStorage
+
+        // Observe Keep Screen On setting and apply to current window
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                settingsStorage.keepScreenOn.collect { keepOn ->
+                    if (keepOn) {
+                        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                    } else {
+                        window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                    }
+                }
+            }
+        }
 
         // 3. Request POST_NOTIFICATIONS permission on Android 13+ (API 33+)
         requestNotificationPermissionIfNeeded()
@@ -80,6 +100,7 @@ class MainActivity : ComponentActivity() {
                     libraryStorage = libraryStorage,
                     localAudioRepository = localAudioRepository,
                     duoManager = duoManager,
+                    settingsStorage = settingsStorage,
                     modifier = Modifier.fillMaxSize(),
                 )
             }

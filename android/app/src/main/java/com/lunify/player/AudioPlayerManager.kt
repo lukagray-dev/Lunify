@@ -4,11 +4,13 @@ import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.media.MediaScannerConnection
+import android.media.audiofx.AudioEffect
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
 import android.util.Log
+import android.widget.Toast
 import androidx.annotation.OptIn
 import androidx.core.content.ContextCompat
 import androidx.media3.common.AudioAttributes
@@ -23,7 +25,11 @@ import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.datasource.cache.CacheDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import com.lunify.data.local.DownloadQuality
 import com.lunify.data.local.LibraryStorage
+import com.lunify.data.local.SettingsStorage
+import com.lunify.data.local.StreamingQuality
+import com.lunify.data.repository.OnlineLyricsRepository
 import com.lunify.data.repository.OnlineMusicRepository
 import com.lunify.domain.model.DuoAction
 import com.lunify.domain.model.PlaybackProgress
@@ -88,9 +94,11 @@ import java.io.File
 class AudioPlayerManager(
     private val context: Context,
     val libraryStorage: LibraryStorage,
+    val settingsStorage: SettingsStorage = SettingsStorage(context),
     private val onlineRepository: OnlineMusicRepository = OnlineMusicRepository(),
     private val downloadNotificationManager: DownloadNotificationManager = DownloadNotificationManager(context),
     private val chunkedDownloader: ChunkedAudioDownloader = ChunkedAudioDownloader(),
+    private val onlineLyricsRepo: OnlineLyricsRepository = OnlineLyricsRepository(),
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var progressTickerJob: Job? = null
@@ -122,12 +130,21 @@ class AudioPlayerManager(
         .setUpstreamDataSourceFactory(defaultDataSourceFactory)
         .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
 
+    // Dynamic data source factory respecting user's Stream Caching toggle in Settings
+    private val dynamicDataSourceFactory = androidx.media3.datasource.DataSource.Factory {
+        if (settingsStorage.streamCachingEnabled.value) {
+            cacheDataSourceFactory.createDataSource()
+        } else {
+            defaultDataSourceFactory.createDataSource()
+        }
+    }
+
     private val mediaSourceFactory = DefaultMediaSourceFactory(context)
-        .setDataSourceFactory(cacheDataSourceFactory)
+        .setDataSourceFactory(dynamicDataSourceFactory)
 
     val exoPlayer: ExoPlayer = ExoPlayer.Builder(context)
         .setAudioAttributes(audioAttributes, /* handleAudioFocus = */ true)
-        .setHandleAudioBecomingNoisy(true)
+        .setHandleAudioBecomingNoisy(settingsStorage.pauseOnDisconnect.value)
         .setWakeMode(C.WAKE_MODE_LOCAL)
         .setMediaSourceFactory(mediaSourceFactory)
         .build()
@@ -144,6 +161,23 @@ class AudioPlayerManager(
 
     init {
         setupPlayerListener()
+        observeSettings()
+    }
+
+    /**
+     * Reactively synchronizes ExoPlayer parameters with [SettingsStorage] updates.
+     */
+    private fun observeSettings() {
+        scope.launch {
+            settingsStorage.skipSilence.collect { enabled ->
+                exoPlayer.skipSilenceEnabled = enabled
+            }
+        }
+        scope.launch {
+            settingsStorage.pauseOnDisconnect.collect { enabled ->
+                exoPlayer.setHandleAudioBecomingNoisy(enabled)
+            }
+        }
     }
 
     /**
@@ -292,7 +326,7 @@ class AudioPlayerManager(
             // Online YouTube Music track: resolve audio stream URL asynchronously
             streamResolutionJob = scope.launch(Dispatchers.IO) {
                 Log.d(TAG, "Resolving online audio stream for: ${track.title} (${track.id})")
-                val streamResult = onlineRepository.getAudioStreamUrl(track.id)
+                val streamResult = onlineRepository.getAudioStreamUrl(track.id, settingsStorage.streamingQuality.value)
 
                 withContext(Dispatchers.Main) {
                     streamResult.onSuccess { streamUrl ->
@@ -430,7 +464,11 @@ class AudioPlayerManager(
                 val streamUrl = if (track.contentUri.startsWith("http://") || track.contentUri.startsWith("https://")) {
                     track.contentUri
                 } else {
-                    onlineRepository.getAudioStreamUrl(track.id).getOrThrow()
+                    val streamQuality = when (settingsStorage.downloadQuality.value) {
+                        DownloadQuality.HIGH -> StreamingQuality.HIGH
+                        DownloadQuality.STANDARD -> StreamingQuality.BALANCED
+                    }
+                    onlineRepository.getAudioStreamUrl(track.id, streamQuality).getOrThrow()
                 }
 
                 // 2. Prepare staging file in app's internal cache directory
@@ -612,6 +650,28 @@ class AudioPlayerManager(
                     )
                 } catch (e: Exception) {
                     Log.w(TAG, "MediaScanner registration notice: ${e.message}")
+                }
+
+                // 6b. Auto-fetch companion synchronized .lrc lyrics if enabled in Settings
+                if (settingsStorage.autoDownloadLyrics.value) {
+                    try {
+                        val durationSec = (track.durationMs / 1000).toInt().coerceAtLeast(0)
+                        val rawLrc = onlineLyricsRepo.fetchRawLrc(track.title, track.artist, durationSec)
+                        if (!rawLrc.isNullOrBlank()) {
+                            val lrcPath = finalFilePath.substringBeforeLast(".") + ".lrc"
+                            val lrcFile = File(lrcPath)
+                            lrcFile.writeText(rawLrc)
+                            Log.i(TAG, "Companion .lrc lyrics written: $lrcPath")
+                            MediaScannerConnection.scanFile(
+                                context,
+                                arrayOf(lrcPath),
+                                null,
+                                null,
+                            )
+                        }
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Failed to auto-fetch companion lyrics: ${e.message}")
+                    }
                 }
 
                 // 7. Transition notification cleanly to completed state
@@ -815,6 +875,33 @@ class AudioPlayerManager(
                 queue = newQueue,
                 currentIndex = activeIndex.coerceIn(0, (newQueue.size - 1).coerceAtLeast(0)),
             )
+        }
+    }
+
+    /**
+     * Launches the native Android system equalizer (Dolby Atmos, AudioFX, Wavelet, etc.)
+     * passing our ExoPlayer's active audioSessionId so system-wide audio effects
+     * are bound directly to Lunify's playback output.
+     */
+    fun launchSystemEqualizer(context: Context) {
+        try {
+            val sessionId = exoPlayer.audioSessionId
+            val intent = Intent(AudioEffect.ACTION_DISPLAY_AUDIO_EFFECT_CONTROL_PANEL).apply {
+                if (sessionId != C.AUDIO_SESSION_ID_UNSET) {
+                    putExtra(AudioEffect.EXTRA_AUDIO_SESSION, sessionId)
+                }
+                putExtra(AudioEffect.EXTRA_PACKAGE_NAME, context.packageName)
+                putExtra(AudioEffect.EXTRA_CONTENT_TYPE, AudioEffect.CONTENT_TYPE_MUSIC)
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            }
+            if (intent.resolveActivity(context.packageManager) != null) {
+                context.startActivity(intent)
+            } else {
+                Toast.makeText(context, "No system equalizer installed on this device", Toast.LENGTH_SHORT).show()
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to launch system equalizer: ${e.message}", e)
+            Toast.makeText(context, "Could not open equalizer: ${e.message}", Toast.LENGTH_SHORT).show()
         }
     }
 

@@ -84,10 +84,13 @@ class OnlineMusicRepository(
     }
 
     /**
-     * Resolves the playable direct audio streaming URL for a YouTube video ID.
+     * Resolves the playable direct audio streaming URL for a YouTube video ID conforming to [quality].
      */
-    suspend fun getAudioStreamUrl(videoId: String): Result<String> = withContext(Dispatchers.IO) {
-        extractor.getAudioStreamUrl(videoId)
+    suspend fun getAudioStreamUrl(
+        videoId: String,
+        quality: com.lunify.data.local.StreamingQuality = com.lunify.data.local.StreamingQuality.HIGH,
+    ): Result<String> = withContext(Dispatchers.IO) {
+        extractor.getAudioStreamUrl(videoId, quality)
     }
 
     /**
